@@ -95,6 +95,7 @@ export default function HomePage() {
         .d2 { animation: fadeUp 0.5s cubic-bezier(.22,1,.36,1) 0.10s both; }
         .d3 { animation: fadeUp 0.5s cubic-bezier(.22,1,.36,1) 0.15s both; }
         .d4 { animation: fadeUp 0.5s cubic-bezier(.22,1,.36,1) 0.20s both; }
+        .d5 { animation: fadeUp 0.5s cubic-bezier(.22,1,.36,1) 0.25s both; }
 
         .ifield { transition: border-color 0.2s, box-shadow 0.2s; }
         .ifield:focus { outline: none; border-color: #f59e0b !important; box-shadow: 0 0 0 3px rgba(245,158,11,0.12) !important; }
@@ -145,6 +146,16 @@ export default function HomePage() {
         }
 
         .spin { animation: spin 0.7s linear infinite; }
+
+        .map-grid {
+          display: grid;
+          grid-template-columns: 1fr 300px;
+          gap: 0;
+        }
+
+        @media (max-width: 768px) {
+          .map-grid { grid-template-columns: 1fr; }
+        }
 
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
@@ -273,9 +284,100 @@ export default function HomePage() {
           </button>
         </div>
 
+        {/* ── LOKASI KAMI ── */}
+        <div className="d5" style={{ position: "relative", zIndex: 1, padding: "0 32px 48px" }}>
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: "#f8fafc", fontFamily: "Syne, sans-serif", marginBottom: 6 }}>
+              Lokasi Kami
+            </h2>
+            <p style={{ fontSize: 13, color: "#64748b" }}>
+              Kunjungi atau hubungi kami langsung di lokasi berikut
+            </p>
+          </div>
+
+          <div
+            className="map-grid"
+            style={{
+              background: "rgba(255,255,255,0.04)",
+              border: "0.5px solid rgba(255,255,255,0.08)",
+              borderRadius: 16,
+              overflow: "hidden",
+            }}
+          >
+            {/* Map embed */}
+            <iframe
+              src="https://www.google.com/maps/embed?pb=!1m16!1m12!1m3!1d26143.113960691953!2d95.34768370409847!3d5.551313154315664!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!2m1!1sLr.%20Lampoh%20balee%20II%20no%2C18%2C%20Tj.%20Selamat%2C%20Kec.%20Darussalam%2C%20Kabupaten%20Aceh%20Besar%2C%20Aceh%2023373!5e1!3m2!1sid!2sid!4v1781598302506!5m2!1sid!2sid"
+              width="100%"
+              height="360"
+              style={{ border: 0, display: "block", minHeight: 300 }}
+              allowFullScreen
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+
+            {/* Info kontak */}
+            <div style={{ padding: 28, display: "flex", flexDirection: "column", gap: 20, borderLeft: "0.5px solid rgba(255,255,255,0.08)" }}>
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+                  📍 Alamat
+                </div>
+                <div style={{ fontSize: 14, color: "#f1f5f9", lineHeight: 1.7 }}>
+                  Lr. Lampoh Balee II No. 18,<br />
+                  Tj. Selamat, Kec. Darussalam,<br />
+                  Kab. Aceh Besar, Aceh 23373
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+                  🕐 Jam Operasional
+                </div>
+                <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.9 }}>
+                  Senin – Sabtu: 08.00 – 20.00<br />
+                  Minggu: 09.00 – 17.00
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>
+                  📞 Kontak
+                </div>
+                <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.9 }}>
+                  +62 xxx-xxxx-xxxx<br />
+                  info@walidrentcaraceh.online
+                </div>
+              </div>
+
+              <a
+                href="https://maps.app.goo.gl/pR1ZiZji1pDUf7L89"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  marginTop: "auto",
+                  background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                  color: "#0a0a0a",
+                  borderRadius: 10,
+                  padding: "11px 20px",
+                  fontWeight: 700,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  textDecoration: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  fontFamily: "'DM Sans', sans-serif",
+                }}
+              >
+                🗺️ Buka di Google Maps
+              </a>
+            </div>
+          </div>
+        </div>
+
         {/* ── FOOTER ── */}
         <div style={{ position: "relative", zIndex: 1, borderTop: "0.5px solid rgba(255,255,255,0.06)", padding: "20px 32px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
-          <span style={{ fontSize: 12, color: "#334155" }}>© 2024 Walid Rent Car · Aceh</span>
+          <span style={{ fontSize: 12, color: "#334155" }}>© 2026 Walid Rent Car · Aceh</span>
           <div style={{ display: "flex", gap: 20 }}>
             <a href="/login" className="link-g" style={{ fontSize: 12 }}>Masuk</a>
             <a href="/register" className="link-g" style={{ fontSize: 12 }}>Daftar</a>
