@@ -48,7 +48,10 @@ export interface Rental {
   rate: number;
   total_cost: number;
   status: "Aktif" | "Selesai" | "Pending" | "Dibatalkan";
-  payment_status: "Lunas" | "DP" | "Belum Bayar";
+  payment_status: "Lunas" | "DP" | "Belum Bayar" | "Menunggu Verifikasi";
+  payment_method?: string;
+  payment_proof_url?: string;
+  payment_proof_filename?: string;
   notes?: string;
   created_at?: string;
 }
@@ -78,6 +81,8 @@ export interface Payment {
   status: "Lunas" | "DP" | "Belum Bayar";
   created_at?: string;
 }
+
+
 
 export type PageId =
   | "dashboard"

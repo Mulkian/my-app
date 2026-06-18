@@ -53,12 +53,13 @@ export interface Rental {
   days: number;
   rate: number;
   total_cost: number;
-  status: string;
-  payment_status: string;
+  status: "Aktif" | "Selesai" | "Pending" | "Dibatalkan";
+  payment_status: "Lunas" | "DP" | "Belum Bayar" | "Menunggu Verifikasi";
+  payment_method?: string;
+  payment_proof_url?: string;
   notes?: string;
-  ktp_url?: string | null;
-  sim_url?: string | null;
   created_at?: string;
+  payment_proof_filename?: string | null;
 }
 
 export interface Notification {
@@ -92,3 +93,4 @@ export interface Review {
   comment: string;
   date: string;
 }
+

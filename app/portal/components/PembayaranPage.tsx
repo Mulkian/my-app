@@ -23,13 +23,141 @@ const PAY_METHODS = [
   { id: "Tunai", icon: "Receipt", desc: "Bayar langsung di kantor (Senin–Sabtu, 08–17)" },
 ] as const;
 
-// ─── Receipt Modal ────────────────────────────────────────────
+const PROOF_BUCKET = "payment-proofs";
+const MAX_PROOF_SIZE_MB = 5;
+
+// ─── Order Detail Modal ────────────────────────────────────────
+function OrderDetailModal({ rental, vehicle, onClose }: {
+  rental: Rental;
+  vehicle: Vehicle | { name: string; photo_url?: string };
+  onClose: () => void;
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 50,
+        background: "rgba(0,0,0,0.65)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: CARD_BG, borderRadius: 18,
+          border: `0.5px solid ${CARD_BORDER}`,
+          width: "100%", maxWidth: 420,
+          overflow: "hidden", maxHeight: "90vh", overflowY: "auto",
+        }}
+      >
+        <div style={{
+          padding: "18px 20px 14px",
+          borderBottom: `0.5px solid ${CARD_BORDER}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: TEXT_PRIMARY }}>Detail Pesanan</div>
+          <button
+            onClick={onClose}
+            style={{ background: "transparent", border: "none", color: TEXT_MUTED, cursor: "pointer", padding: 4, fontSize: 20 }}
+          >✕</button>
+        </div>
+
+        <div style={{ padding: "18px 20px" }}>
+          <VehicleImg
+            vehicle={vehicle}
+            style={{ width: "100%", height: 140, objectFit: "cover", borderRadius: 10, marginBottom: 14 }}
+          />
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: TEXT_PRIMARY }}>{rental.vehicle_name}</div>
+            <StatusBadge status={rental.payment_status} />
+          </div>
+
+          <div style={{ background: "#0f1724", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
+            <InfoRow label="Plat Nomor" value={rental.plate} />
+            <InfoRow label="Tanggal Ambil" value={fmtDate(rental.start_date)} />
+            <InfoRow label="Tanggal Kembali" value={fmtDate(rental.end_date)} />
+            <InfoRow label="Durasi" value={`${rental.days} hari`} />
+            <InfoRow label="Tarif/hari" value={fmt(rental.rate)} />
+            <InfoRow label="Metode Bayar" value={rental.payment_method ?? "—"} />
+          </div>
+
+          <div style={{
+            display: "flex", justifyContent: "space-between", alignItems: "center",
+            background: "rgba(245,158,11,0.08)", borderRadius: 10,
+            padding: "12px 14px", marginBottom: 16,
+          }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: TEXT_PRIMARY }}>Total Pembayaran</span>
+            <span style={{ fontSize: 18, fontWeight: 900, color: ACCENT }}>{fmt(rental.total_cost)}</span>
+          </div>
+
+          {rental.payment_proof_url ? (
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginBottom: 8 }}>Bukti Bayar</div>
+              <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${CARD_BORDER}` }}>
+                <img
+                  src={rental.payment_proof_url}
+                  alt="Bukti pembayaran"
+                  style={{ width: "100%", maxHeight: 280, objectFit: "contain", background: "#0f1724", display: "block" }}
+                />
+                {rental.payment_proof_filename && (
+                  <div style={{ padding: "8px 12px", background: "#0f1724", borderTop: `1px solid ${CARD_BORDER}`, fontSize: 11, color: TEXT_MUTED }}>
+                    {rental.payment_proof_filename}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "20px 0", fontSize: 12, color: TEXT_MUTED, border: `1px dashed ${CARD_BORDER}`, borderRadius: 10 }}>
+              Belum ada bukti bayar diupload
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding: "0 20px 18px" }}>
+          <button
+            onClick={onClose}
+            style={{ width: "100%", padding: 11, borderRadius: 10, border: "none", background: ACCENT, color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+          >
+            Tutup
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { bg: string; color: string; label: string }> = {
+    "Lunas":               { bg: "rgba(34,197,94,0.15)",  color: "#4ade80", label: "Lunas" },
+    "Menunggu Verifikasi": { bg: "rgba(245,158,11,0.15)", color: "#fbbf24", label: "Menunggu Verifikasi" },
+    "Belum Bayar":         { bg: "rgba(239,68,68,0.15)",  color: "#f87171", label: "Belum Bayar" },
+  };
+  const s = map[status] ?? { bg: "rgba(255,255,255,0.1)", color: TEXT_MUTED, label: status };
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, background: s.bg, color: s.color, padding: "4px 10px", borderRadius: 20 }}>
+      {s.label}
+    </span>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", padding: "5px 0", borderBottom: "0.5px solid rgba(255,255,255,0.05)" }}>
+      <span style={{ fontSize: 12, color: TEXT_MUTED }}>{label}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: TEXT_PRIMARY }}>{value}</span>
+    </div>
+  );
+}
+
+// ─── Receipt Modal ─────────────────────────────────────────────
 function ReceiptModal({ rental, vehicle, onClose }: {
   rental: Rental;
   vehicle: Vehicle | { name: string; photo_url?: string };
   onClose: () => void;
 }) {
   const printRef = useRef<HTMLDivElement>(null);
+  const isPending = rental.payment_status === "Menunggu Verifikasi";
 
   const handlePrint = () => {
     const printWindow = window.open("", "_blank", "width=400,height=700");
@@ -56,10 +184,7 @@ function ReceiptModal({ rental, vehicle, onClose }: {
           .footer { text-align:center; font-size:11px; color:#888; margin-top:16px; }
         </style>
       </head><body><div class="receipt">
-        <div class="center">
-          <h1>RENTAL MOBIL</h1>
-          <p class="sub">Jl. Contoh No. 123, Batam · (0778) 000-000</p>
-        </div>
+        <div class="center"><h1>RENTAL MOBIL</h1><p class="sub">Jl. Contoh No. 123, Batam · (0778) 000-000</p></div>
         <hr class="solid" />
         <p class="section-title">Informasi Sewa</p>
         <div class="row"><span class="label">No. Rental</span><span class="value">#${rental.id?.toString().slice(0,8).toUpperCase() ?? "—"}</span></div>
@@ -79,12 +204,9 @@ function ReceiptModal({ rental, vehicle, onClose }: {
         <div class="row"><span class="label">Durasi</span><span class="value">× ${rental.days} hari</span></div>
         <hr class="solid" />
         <div class="total-row"><span>TOTAL</span><span>${fmt(rental.total_cost)}</span></div>
-        <div class="row"><span class="label">Status</span><span class="value"><span class="badge">LUNAS</span></span></div>
+        <div class="row"><span class="label">Status</span><span class="value"><span class="badge">${isPending ? "MENUNGGU VERIFIKASI" : "LUNAS"}</span></span></div>
         <hr class="dash" />
-        <div class="footer">
-          <p>Tunjukkan struk ini saat pengambilan kendaraan.</p>
-          <p style="margin-top:6px">Terima kasih telah mempercayai kami!</p>
-        </div>
+        <div class="footer"><p>Tunjukkan struk ini saat pengambilan kendaraan.</p><p style="margin-top:6px">Terima kasih telah mempercayai kami!</p></div>
       </div>
       <script>window.onload=()=>window.print()<\/script>
       </body></html>
@@ -95,51 +217,50 @@ function ReceiptModal({ rental, vehicle, onClose }: {
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:50, background:"rgba(0,0,0,0.65)", display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background:CARD_BG, borderRadius:18, border:`0.5px solid ${CARD_BORDER}`, width:"100%", maxWidth:400, overflow:"hidden" }}>
-
-        {/* Success banner */}
-        <div style={{ background:"rgba(34,197,94,0.12)", padding:"24px 24px 20px", textAlign:"center", borderBottom:"0.5px solid rgba(34,197,94,0.2)" }}>
-          <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(34,197,94,0.15)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
-           <div style={{ color: "#4ade80" }}>
-  <Icons.CheckCircle size={28} />
-</div>
+        {isPending ? (
+          <div style={{ background:"rgba(245,158,11,0.12)", padding:"24px 24px 20px", textAlign:"center", borderBottom:"0.5px solid rgba(245,158,11,0.2)" }}>
+            <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(245,158,11,0.15)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+              <div style={{ color:"#fbbf24" }}><Icons.Receipt size={28} /></div>
+            </div>
+            <div style={{ fontSize:18, fontWeight:800, color:"#fbbf24", marginBottom:4 }}>Bukti Bayar Terkirim!</div>
+            <div style={{ fontSize:12, color:TEXT_MUTED }}>Menunggu verifikasi admin. Kamu akan dikabari setelah disetujui.</div>
           </div>
-          <div style={{ fontSize:18, fontWeight:800, color:"#4ade80", marginBottom:4 }}>Pembayaran Berhasil!</div>
-          <div style={{ fontSize:12, color:TEXT_MUTED }}>Simpan struk ini untuk pengambilan kendaraan.</div>
-        </div>
+        ) : (
+          <div style={{ background:"rgba(34,197,94,0.12)", padding:"24px 24px 20px", textAlign:"center", borderBottom:"0.5px solid rgba(34,197,94,0.2)" }}>
+            <div style={{ width:52, height:52, borderRadius:"50%", background:"rgba(34,197,94,0.15)", display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 12px" }}>
+              <div style={{ color:"#4ade80" }}><Icons.CheckCircle size={28} /></div>
+            </div>
+            <div style={{ fontSize:18, fontWeight:800, color:"#4ade80", marginBottom:4 }}>Pembayaran Berhasil!</div>
+            <div style={{ fontSize:12, color:TEXT_MUTED }}>Simpan struk ini untuk pengambilan kendaraan.</div>
+          </div>
+        )}
 
-        {/* Receipt body */}
         <div ref={printRef} style={{ padding:"20px 24px" }}>
           <div style={{ textAlign:"center", marginBottom:16 }}>
             <div style={{ fontSize:13, fontWeight:800, letterSpacing:"0.15em", color:TEXT_PRIMARY, textTransform:"uppercase" }}>RENTAL MOBIL</div>
             <div style={{ fontSize:11, color:TEXT_MUTED, marginTop:2 }}>Jl. Contoh No. 123, Batam · (0778) 000-000</div>
           </div>
-
           <Dash />
           <Section title="Informasi Sewa">
             <Row label="No. Rental" value={`#${rental.id?.toString().slice(0,8).toUpperCase() ?? "—"}`} />
             <Row label="Tgl. Cetak" value={new Date().toLocaleDateString("id-ID", { day:"2-digit", month:"short", year:"numeric" })} />
           </Section>
-
           <Dash />
           <Section title="Kendaraan">
             <Row label="Nama" value={rental.vehicle_name} />
             <Row label="Plat Nomor" value={rental.plate} />
           </Section>
-
           <Dash />
           <Section title="Periode Sewa">
             <Row label="Ambil" value={fmtDate(rental.start_date)} />
             <Row label="Kembali" value={fmtDate(rental.end_date)} />
             <Row label="Durasi" value={`${rental.days} hari`} />
           </Section>
-
           <Dash />
           <Section title="Rincian Biaya">
             <Row label="Tarif/hari" value={fmt(rental.rate)} />
             <Row label="Durasi" value={`× ${rental.days} hari`} />
           </Section>
-
-          {/* Total */}
           <div style={{ borderTop:`1.5px solid rgba(255,255,255,0.18)`, margin:"12px 0" }} />
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"4px 0" }}>
             <span style={{ fontSize:14, fontWeight:800, color:TEXT_PRIMARY }}>TOTAL</span>
@@ -147,17 +268,20 @@ function ReceiptModal({ rental, vehicle, onClose }: {
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:8 }}>
             <span style={{ fontSize:12, color:TEXT_MUTED }}>Status Pembayaran</span>
-            <span style={{ fontSize:11, fontWeight:800, background:"rgba(34,197,94,0.15)", color:"#4ade80", padding:"3px 12px", borderRadius:20, letterSpacing:"0.05em" }}>LUNAS</span>
+            {isPending ? (
+              <span style={{ fontSize:11, fontWeight:800, background:"rgba(245,158,11,0.15)", color:"#fbbf24", padding:"3px 12px", borderRadius:20 }}>MENUNGGU VERIFIKASI</span>
+            ) : (
+              <span style={{ fontSize:11, fontWeight:800, background:"rgba(34,197,94,0.15)", color:"#4ade80", padding:"3px 12px", borderRadius:20 }}>LUNAS</span>
+            )}
           </div>
-
           <Dash />
           <div style={{ textAlign:"center", fontSize:11, color:TEXT_MUTED, lineHeight:1.6 }}>
-            Tunjukkan struk ini saat pengambilan kendaraan.<br />
-            Terima kasih telah mempercayai kami!
+            {isPending
+              ? <>Admin akan memverifikasi bukti bayar kamu.<br />Status akan berubah jadi Lunas setelah disetujui.</>
+              : <>Tunjukkan struk ini saat pengambilan kendaraan.<br />Terima kasih telah mempercayai kami!</>}
           </div>
         </div>
 
-        {/* Buttons */}
         <div style={{ display:"flex", gap:10, padding:"0 24px 20px" }}>
           <button onClick={handlePrint} style={{ flex:1, padding:"11px 0", borderRadius:10, border:`1px solid ${CARD_BORDER}`, background:"transparent", color:TEXT_PRIMARY, fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", gap:7 }}>
             <Icons.Receipt size={16} /> Cetak Struk
@@ -192,36 +316,217 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Main page ────────────────────────────────────────────────
+// ─── Upload Bukti Bayar ────────────────────────────────────────
+function ProofUpload({
+  file, preview, error, onSelect, onRemove,
+}: {
+  file: File | null;
+  preview: string | null;
+  error: string | null;
+  onSelect: (file: File) => void;
+  onRemove: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginBottom: 8 }}>
+        Upload Bukti Bayar <span style={{ color: "#f87171" }}>*</span>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/jpg,image/webp"
+        style={{ display: "none" }}
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onSelect(f);
+          e.target.value = "";
+        }}
+      />
+      {!preview ? (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          style={{
+            width: "100%", padding: "22px 16px", borderRadius: 10,
+            border: `1.5px dashed ${error ? "#f87171" : CARD_BORDER}`,
+            background: "#0f1724", color: TEXT_MUTED,
+            fontSize: 12, fontFamily: "inherit", cursor: "pointer",
+            display: "flex", flexDirection: "column", alignItems: "center", gap: 8,
+          }}
+        >
+          <Icons.Receipt size={22} />
+          <span>Klik untuk pilih screenshot / foto bukti transfer</span>
+          <span style={{ fontSize: 11, color: TEXT_MUTED, opacity: 0.7 }}>
+            PNG, JPG, atau WEBP — maks {MAX_PROOF_SIZE_MB}MB
+          </span>
+        </button>
+      ) : (
+        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: `1px solid ${CARD_BORDER}` }}>
+          <img src={preview} alt="Preview bukti bayar" style={{ width: "100%", maxHeight: 220, objectFit: "contain", background: "#0f1724", display: "block" }} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", background: "#0f1724", borderTop: `1px solid ${CARD_BORDER}` }}>
+            <span style={{ fontSize: 11, color: TEXT_MUTED, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+              {file?.name}
+            </span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" onClick={() => inputRef.current?.click()} style={{ fontSize: 11, fontWeight: 700, color: ACCENT, background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Ganti</button>
+              <button type="button" onClick={onRemove} style={{ fontSize: 11, fontWeight: 700, color: "#f87171", background: "transparent", border: "none", cursor: "pointer", fontFamily: "inherit" }}>Hapus</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {error && <div style={{ fontSize: 11, color: "#f87171", marginTop: 6 }}>{error}</div>}
+    </div>
+  );
+}
+
+// ─── Main Page ─────────────────────────────────────────────────
 export default function PembayaranPage({ rentals, vehicles, preselectedRental, onPaymentComplete, onNotify }: Props) {
   const [selectedRental, setSelectedRental] = useState<Rental | null>(preselectedRental ?? null);
   const [payMethod, setPayMethod] = useState("QRIS");
   const [payLoading, setPayLoading] = useState(false);
   const [receiptRental, setReceiptRental] = useState<Rental | null>(null);
+  const [detailRental, setDetailRental] = useState<Rental | null>(null);
 
-  const unpaid = rentals.filter((r) => r.payment_status === "Belum Bayar");
-  const paid   = rentals.filter((r) => r.payment_status === "Lunas");
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofPreview, setProofPreview] = useState<string | null>(null);
+  const [proofError, setProofError] = useState<string | null>(null);
+
+  const unpaid  = rentals.filter((r) => r.payment_status === "Belum Bayar");
+  const pending = rentals.filter((r) => r.payment_status === "Menunggu Verifikasi");
+  const paid    = rentals.filter((r) => r.payment_status === "Lunas");
 
   const getVehicleByName = (name: string) =>
     vehicles.find((v) => v.name === name) ?? { name, photo_url: undefined };
 
+  const resetProof = () => {
+    setProofFile(null);
+    setProofPreview(null);
+    setProofError(null);
+  };
+
+  const handleSelectRentalToPay = (r: Rental) => {
+    setSelectedRental(r);
+    resetProof();
+  };
+
+  const handleSelectProof = (file: File) => {
+    setProofError(null);
+    if (!file.type.startsWith("image/")) {
+      setProofError("File harus berupa gambar (PNG, JPG, atau WEBP).");
+      return;
+    }
+    if (file.size > MAX_PROOF_SIZE_MB * 1024 * 1024) {
+      setProofError(`Ukuran file maksimal ${MAX_PROOF_SIZE_MB}MB.`);
+      return;
+    }
+    setProofFile(file);
+    const reader = new FileReader();
+    reader.onload = () => setProofPreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  // ─── handlePay (satu-satunya, bersih) ────────────────────────
   const handlePay = async () => {
     if (!selectedRental) return;
-    setPayLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    const { error } = await supabase.from("rentals").update({ payment_status: "Lunas" }).eq("id", selectedRental.id);
-    if (!error) {
-      const { data: r } = await supabase.from("rentals").select("*").order("created_at", { ascending: false });
-      onPaymentComplete(r ?? []);
-      onNotify({ type: "success", title: "Pembayaran Berhasil", message: `Pembayaran ${fmt(selectedRental.total_cost)} untuk ${selectedRental.vehicle_name} berhasil.` });
-      setReceiptRental(selectedRental); // ← tampilkan struk
+    if (!proofFile) {
+      setProofError("Bukti bayar wajib diupload sebelum konfirmasi.");
+      return;
     }
-    setPayLoading(false);
+
+    setPayLoading(true);
+
+    try {
+      const ext = proofFile.name.split(".").pop()?.toLowerCase() || "jpg";
+      const filePath = `${selectedRental.id}-${Date.now()}.${ext}`;
+
+      console.log("Mulai upload:", filePath);
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(PROOF_BUCKET)
+        .upload(filePath, proofFile, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: proofFile.type,
+        });
+
+      console.log("Hasil upload:", { uploadData, uploadError });
+
+      if (uploadError) {
+        console.error("Upload error:", uploadError);
+        onNotify({
+          type: "success",
+          title: "Upload Gagal",
+          message: `Gagal mengupload bukti bayar: ${uploadError.message}`,
+        });
+        return;
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from(PROOF_BUCKET)
+        .getPublicUrl(filePath);
+      const proofUrl = publicUrlData.publicUrl;
+
+      console.log("Public URL:", proofUrl);
+
+      const { error: updateError } = await supabase
+        .from("rentals")
+        .update({
+          payment_status: "Menunggu Verifikasi",
+          payment_method: payMethod,
+          payment_proof_url: proofUrl,
+          payment_proof_filename: proofFile.name,
+        })
+        .eq("id", selectedRental.id);
+
+      console.log("Hasil update DB:", { updateError });
+
+      if (updateError) {
+        console.error("DB update error:", updateError);
+        onNotify({
+          type: "success",
+          title: "Gagal Menyimpan",
+          message: `Gagal menyimpan status pembayaran: ${updateError.message}`,
+        });
+        return;
+      }
+
+      const { data: refreshed } = await supabase
+        .from("rentals")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      onPaymentComplete(refreshed ?? []);
+      onNotify({
+        type: "success",
+        title: "Bukti Bayar Terkirim",
+        message: `Bukti pembayaran untuk ${selectedRental.vehicle_name} berhasil dikirim dan menunggu verifikasi admin.`,
+      });
+
+      setReceiptRental({
+        ...selectedRental,
+        payment_status: "Menunggu Verifikasi",
+        payment_method: payMethod,
+        payment_proof_url: proofUrl,
+      });
+
+    } catch (err) {
+      console.error("Unexpected error:", err);
+      onNotify({
+        type: "success",
+        title: "Terjadi Kesalahan",
+        message: "Terjadi kesalahan tak terduga. Coba lagi.",
+      });
+    } finally {
+      setPayLoading(false);
+    }
   };
 
   const handleCloseReceipt = () => {
     setReceiptRental(null);
     setSelectedRental(null);
+    resetProof();
   };
 
   const MethodIcon = ({ id }: { id: string }) => {
@@ -240,13 +545,19 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
         />
       )}
 
-      {/* Header */}
+      {detailRental && (
+        <OrderDetailModal
+          rental={detailRental}
+          vehicle={getVehicleByName(detailRental.vehicle_name)}
+          onClose={() => setDetailRental(null)}
+        />
+      )}
+
       <div style={{ marginBottom:20 }}>
         <h1 style={{ fontSize:22, fontWeight:800, color:TEXT_PRIMARY, marginBottom:4 }}>Pembayaran</h1>
         <p style={{ fontSize:13, color:TEXT_MUTED }}>Kelola tagihan dan riwayat pembayaran</p>
       </div>
 
-      {/* Unpaid bills */}
       {unpaid.length > 0 && (
         <section style={{ marginBottom:22 }}>
           <h2 style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY, marginBottom:12 }}>Tagihan Belum Dibayar</h2>
@@ -257,18 +568,40 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
                 <div style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY, marginBottom:2 }}>{r.vehicle_name}</div>
                 <div style={{ fontSize:12, color:TEXT_MUTED }}>{fmtDate(r.start_date)} – {fmtDate(r.end_date)} · {r.days} hari</div>
               </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ fontSize:15, fontWeight:800, color:ACCENT, marginBottom:8 }}>{fmt(r.total_cost)}</div>
-                <button onClick={() => setSelectedRental(r)} style={{ padding:"7px 16px", borderRadius:8, border:"none", background:ACCENT, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-                  Bayar
-                </button>
+              <div style={{ textAlign:"right", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+                <div style={{ fontSize:15, fontWeight:800, color:ACCENT }}>{fmt(r.total_cost)}</div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <button onClick={() => setDetailRental(r)} style={{ padding:"7px 12px", borderRadius:8, border:`1px solid ${CARD_BORDER}`, background:"transparent", color:TEXT_MUTED, fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Detail</button>
+                  <button onClick={() => handleSelectRentalToPay(r)} style={{ padding:"7px 16px", borderRadius:8, border:"none", background:ACCENT, color:"#fff", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Bayar</button>
+                </div>
               </div>
             </div>
           ))}
         </section>
       )}
 
-      {/* Payment form */}
+      {pending.length > 0 && (
+        <section style={{ marginBottom:22 }}>
+          <h2 style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY, marginBottom:12 }}>Menunggu Verifikasi</h2>
+          {pending.map((r, i) => (
+            <div key={i} style={{ background:CARD_BG, borderRadius:12, border:"0.5px solid rgba(245,158,11,0.2)", padding:"16px 18px", marginBottom:10, display:"flex", gap:14, alignItems:"center" }}>
+              <VehicleImg vehicle={getVehicleByName(r.vehicle_name)} style={{ width:60, height:44, objectFit:"cover", borderRadius:8 }} />
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY, marginBottom:2 }}>{r.vehicle_name}</div>
+                <div style={{ fontSize:12, color:TEXT_MUTED }}>{fmtDate(r.start_date)} – {fmtDate(r.end_date)} · {r.days} hari</div>
+              </div>
+              <div style={{ textAlign:"right", display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+                <div style={{ fontSize:15, fontWeight:800, color:TEXT_PRIMARY }}>{fmt(r.total_cost)}</div>
+                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <button onClick={() => setDetailRental(r)} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${CARD_BORDER}`, background:"transparent", color:TEXT_MUTED, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Lihat Bukti</button>
+                  <span style={{ fontSize:11, fontWeight:700, background:"rgba(245,158,11,0.15)", color:"#fbbf24", padding:"5px 12px", borderRadius:20 }}>Menunggu Verifikasi</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {selectedRental && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 320px", gap:18, marginBottom:22 }}>
           <div style={{ background:CARD_BG, borderRadius:14, border:`0.5px solid ${CARD_BORDER}`, padding:22 }}>
@@ -283,55 +616,26 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
                 </div>
               </label>
             ))}
-            {/* QR Code QRIS */}
-            {payMethod === "QRIS" && selectedRental && (
-              <div style={{
-                background: "#fff",
-                borderRadius: 12,
-                padding: 16,
-                textAlign: "center",
-                marginBottom: 12,
-              }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: "#111", marginBottom: 10 }}>
-                  Scan QR untuk Membayar
-                </div>
-                <QRCodeSVG
-  value={`QRIS-${selectedRental.id}-${selectedRental.total_cost}`}
-  size={200}
-  level="H"
-  includeMargin={true}
-  style={{ margin: "0 auto", display: "block" }}
-/>
-                <div style={{ fontSize: 11, color: "#888", marginTop: 10, lineHeight: 1.5 }}>
-                  Bisa dibayar via GoPay, OVO, Dana,<br />
-                  m-BCA, BRImo, dan semua e-wallet QRIS
-                </div>
-                <div style={{
-                  marginTop: 12,
-                  background: "#f0fdf4",
-                  borderRadius: 8,
-                  padding: "8px 12px",
-                  fontSize: 12,
-                  color: "#16a34a",
-                  fontWeight: 600,
-                }}>
-                  Total: {fmt(selectedRental.total_cost)}
-                </div>
+
+            {payMethod === "QRIS" && (
+              <div style={{ background:"#fff", borderRadius:12, padding:16, textAlign:"center", marginBottom:12 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"#111", marginBottom:10 }}>Scan QR untuk Membayar</div>
+                <QRCodeSVG value={`QRIS-${selectedRental.id}-${selectedRental.total_cost}`} size={200} level="H" includeMargin={true} style={{ margin:"0 auto", display:"block" }} />
+                <div style={{ fontSize:11, color:"#888", marginTop:10, lineHeight:1.5 }}>Bisa dibayar via GoPay, OVO, Dana,<br />m-BCA, BRImo, dan semua e-wallet QRIS</div>
+                <div style={{ marginTop:12, background:"#f0fdf4", borderRadius:8, padding:"8px 12px", fontSize:12, color:"#16a34a", fontWeight:600 }}>Total: {fmt(selectedRental.total_cost)}</div>
               </div>
             )}
+
+            <ProofUpload file={proofFile} preview={proofPreview} error={proofError} onSelect={handleSelectProof} onRemove={resetProof} />
+
             <button onClick={handlePay} disabled={payLoading} style={{ width:"100%", padding:13, borderRadius:10, border:"none", background:ACCENT, color:"#fff", fontSize:14, fontWeight:700, cursor:payLoading?"not-allowed":"pointer", fontFamily:"inherit", opacity:payLoading?0.7:1, marginTop:6 }}>
-              {payLoading
-  ? "Memproses…"
-  : payMethod === "QRIS"
-  ? "Konfirmasi Sudah Bayar"
-  : `Bayar ${fmt(selectedRental.total_cost)}`}
+              {payLoading ? "Mengupload bukti…" : "Kirim Bukti Bayar"}
             </button>
           </div>
           <BillSummary rental={selectedRental} vehicle={getVehicleByName(selectedRental.vehicle_name)} />
         </div>
       )}
 
-      {/* Payment history */}
       <div style={{ background:CARD_BG, borderRadius:14, border:`0.5px solid ${CARD_BORDER}`, overflow:"hidden" }}>
         <div style={{ padding:"14px 18px", borderBottom:`0.5px solid ${CARD_BORDER}` }}>
           <h2 style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY }}>Riwayat Pembayaran</h2>
@@ -343,7 +647,7 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
               <thead>
                 <tr style={{ background:"#0f1724" }}>
-                  {["Kendaraan","Tanggal","Durasi","Total","Status"].map((h) => (
+                  {["Kendaraan","Tanggal","Durasi","Total","Status",""].map((h) => (
                     <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:11, fontWeight:700, color:TEXT_MUTED, letterSpacing:"0.07em", textTransform:"uppercase" }}>{h}</th>
                   ))}
                 </tr>
@@ -364,6 +668,9 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
                     <td style={{ padding:"12px 16px", fontSize:13, color:TEXT_PRIMARY }}>{r.days}h</td>
                     <td style={{ padding:"12px 16px", fontSize:13, fontWeight:700, color:"#4ade80" }}>{fmt(r.total_cost)}</td>
                     <td style={{ padding:"12px 16px" }}><Badge status="Lunas" /></td>
+                    <td style={{ padding:"12px 16px" }}>
+                      <button onClick={() => setDetailRental(r)} style={{ padding:"5px 12px", borderRadius:8, border:`1px solid ${CARD_BORDER}`, background:"transparent", color:TEXT_MUTED, fontSize:11, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Detail</button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
