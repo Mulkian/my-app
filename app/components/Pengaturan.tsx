@@ -30,10 +30,72 @@ interface PolicyData {
   deposit: string;
 }
 
-interface Settings {
-  id?: string;
-  profile: ProfileData;
-  policy: PolicyData;
+// ─── Design tokens (premium dark) ──────────────────────────────────────────────
+const palette = {
+  bgPanel: "linear-gradient(165deg, #11151c 0%, #0a0d12 100%)",
+  border: "#1f2530",
+  borderSoft: "rgba(255,255,255,0.06)",
+  gold: "#d4af6a",
+  goldSoft: "rgba(212,175,106,0.12)",
+  goldBorder: "rgba(212,175,106,0.35)",
+  textPrimary: "#f3ede2",
+  textMuted: "#8b8f99",
+  textFaint: "#5b5f6a",
+  danger: "#e08585",
+};
+
+const fadeIn: React.CSSProperties = {
+  animation: "pengaturanFadeIn 0.35s ease both",
+};
+
+// One-time keyframes injection
+function GlobalAnim() {
+  return (
+    <style>{`
+      @keyframes pengaturanFadeIn {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes pengaturanShimmer {
+        0% { background-position: -200px 0; }
+        100% { background-position: 200px 0; }
+      }
+    `}</style>
+  );
+}
+
+// ─── Section label (small caps, gold accent) ───────────────────────────────────
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        marginBottom: "22px",
+      }}
+    >
+      <span
+        style={{
+          width: "3px",
+          height: "16px",
+          borderRadius: "2px",
+          background: `linear-gradient(180deg, ${palette.gold}, transparent)`,
+        }}
+      />
+      <h2
+        style={{
+          fontSize: "13px",
+          fontWeight: 600,
+          color: palette.textPrimary,
+          margin: 0,
+          letterSpacing: "0.4px",
+        }}
+      >
+        {children}
+      </h2>
+    </div>
+  );
 }
 
 // ─── Profile View Card ─────────────────────────────────────────────────────────
@@ -66,71 +128,105 @@ function ProfileViewCard({
   ];
 
   return (
-    <div style={{ maxWidth: "640px" }}>
+    <div style={{ maxWidth: "660px", ...fadeIn }}>
+      <GlobalAnim />
       {/* Business card header */}
       <div
         style={{
-          background: "#0f172a",
-          border: "1px solid #1e293b",
-          borderRadius: "16px",
-          padding: "28px",
-          marginBottom: "16px",
+          background: palette.bgPanel,
+          border: `1px solid ${palette.border}`,
+          borderRadius: "18px",
+          padding: "32px",
+          marginBottom: "18px",
+          position: "relative",
+          overflow: "hidden",
+          boxShadow:
+            "0 1px 0 rgba(255,255,255,0.03) inset, 0 20px 40px -24px rgba(0,0,0,0.6)",
         }}
       >
+        {/* subtle corner glow */}
+        <div
+          style={{
+            position: "absolute",
+            top: "-60px",
+            right: "-60px",
+            width: "180px",
+            height: "180px",
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle, rgba(212,175,106,0.10) 0%, transparent 70%)",
+            pointerEvents: "none",
+          }}
+        />
+
         <div
           style={{
             display: "flex",
             alignItems: "flex-start",
             gap: "20px",
-            marginBottom: "24px",
+            marginBottom: "26px",
+            position: "relative",
           }}
         >
           {/* Avatar */}
           <div
             style={{
-              width: "64px",
-              height: "64px",
+              width: "60px",
+              height: "60px",
               borderRadius: "14px",
-              background: "linear-gradient(135deg, #f59e0b 0%, #d97706 100%)",
+              background: `linear-gradient(135deg, ${palette.gold} 0%, #9c7a3f 100%)`,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              fontSize: "22px",
+              fontSize: "20px",
               fontWeight: 700,
-              color: "#0f0f0f",
+              color: "#1a1208",
               flexShrink: 0,
               letterSpacing: "-0.5px",
+              boxShadow: "0 8px 20px -8px rgba(212,175,106,0.5)",
             }}
           >
             {initials}
           </div>
           {/* Business name & badge */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, paddingTop: "2px" }}>
             <h2
               style={{
-                fontSize: "20px",
+                fontSize: "19px",
                 fontWeight: 700,
-                color: "#f1f5f9",
+                color: palette.textPrimary,
                 margin: 0,
-                marginBottom: "6px",
+                marginBottom: "8px",
                 wordBreak: "break-word",
+                letterSpacing: "-0.2px",
               }}
             >
               {profile.businessName || "Nama Usaha Belum Diisi"}
             </h2>
             <span
               style={{
-                display: "inline-block",
-                background: "#1e293b",
-                color: "#f59e0b",
-                fontSize: "11px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                background: palette.goldSoft,
+                color: palette.gold,
+                fontSize: "10.5px",
                 fontWeight: 600,
-                padding: "3px 10px",
+                padding: "4px 11px",
                 borderRadius: "20px",
-                letterSpacing: "0.5px",
+                letterSpacing: "0.6px",
                 textTransform: "uppercase",
+                border: `1px solid ${palette.goldBorder}`,
               }}
             >
+              <span
+                style={{
+                  width: "5px",
+                  height: "5px",
+                  borderRadius: "50%",
+                  background: palette.gold,
+                }}
+              />
               Profil Aktif
             </span>
           </div>
@@ -141,32 +237,38 @@ function ProfileViewCard({
               display: "flex",
               alignItems: "center",
               gap: "6px",
-              padding: "8px 14px",
-              background: "transparent",
-              border: "1px solid #334155",
-              borderRadius: "8px",
-              color: "#94a3b8",
-              fontSize: "13px",
+              padding: "9px 16px",
+              background: "rgba(255,255,255,0.02)",
+              border: `1px solid ${palette.border}`,
+              borderRadius: "9px",
+              color: palette.textMuted,
+              fontSize: "12.5px",
               fontWeight: 600,
               cursor: "pointer",
               fontFamily: "inherit",
               flexShrink: 0,
-              transition: "all 0.15s",
+              transition: "all 0.2s ease",
             }}
             onMouseEnter={(e) => {
               (e.currentTarget as HTMLButtonElement).style.borderColor =
-                "#f59e0b";
-              (e.currentTarget as HTMLButtonElement).style.color = "#f59e0b";
+                palette.goldBorder;
+              (e.currentTarget as HTMLButtonElement).style.color =
+                palette.gold;
+              (e.currentTarget as HTMLButtonElement).style.background =
+                palette.goldSoft;
             }}
             onMouseLeave={(e) => {
               (e.currentTarget as HTMLButtonElement).style.borderColor =
-                "#334155";
-              (e.currentTarget as HTMLButtonElement).style.color = "#94a3b8";
+                palette.border;
+              (e.currentTarget as HTMLButtonElement).style.color =
+                palette.textMuted;
+              (e.currentTarget as HTMLButtonElement).style.background =
+                "rgba(255,255,255,0.02)";
             }}
           >
             <svg
-              width="13"
-              height="13"
+              width="12"
+              height="12"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -182,11 +284,12 @@ function ProfileViewCard({
         {/* Info rows */}
         <div
           style={{
-            borderTop: "1px solid #1e293b",
-            paddingTop: "20px",
+            borderTop: `1px solid ${palette.borderSoft}`,
+            paddingTop: "22px",
             display: "flex",
             flexDirection: "column",
-            gap: "12px",
+            gap: "14px",
+            position: "relative",
           }}
         >
           {infoRows.map((row) => (
@@ -201,10 +304,11 @@ function ProfileViewCard({
             >
               <span
                 style={{
-                  fontSize: "13px",
-                  color: "#64748b",
+                  fontSize: "12.5px",
+                  color: palette.textFaint,
                   flexShrink: 0,
                   minWidth: "120px",
+                  fontWeight: 500,
                 }}
               >
                 {row.label}
@@ -212,9 +316,10 @@ function ProfileViewCard({
               <span
                 style={{
                   fontSize: "13px",
-                  color: "#e2e8f0",
+                  color: "#dcd6c9",
                   textAlign: "right",
                   wordBreak: "break-word",
+                  fontWeight: 500,
                 }}
               >
                 {row.value}
@@ -227,19 +332,20 @@ function ProfileViewCard({
       {/* Policy summary card */}
       <div
         style={{
-          background: "#0f172a",
-          border: "1px solid #1e293b",
-          borderRadius: "14px",
-          padding: "20px 28px",
+          background: palette.bgPanel,
+          border: `1px solid ${palette.border}`,
+          borderRadius: "16px",
+          padding: "24px 32px",
+          boxShadow: "0 14px 30px -20px rgba(0,0,0,0.55)",
         }}
       >
         <p
           style={{
             fontSize: "11px",
             fontWeight: 700,
-            color: "#64748b",
-            margin: "0 0 14px",
-            letterSpacing: "1px",
+            color: palette.gold,
+            margin: "0 0 16px",
+            letterSpacing: "1.2px",
             textTransform: "uppercase",
           }}
         >
@@ -249,7 +355,7 @@ function ProfileViewCard({
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: "12px 32px",
+            gap: "16px 32px",
           }}
         >
           {policyRows.map((row) => (
@@ -257,16 +363,16 @@ function ProfileViewCard({
               <p
                 style={{
                   fontSize: "11px",
-                  color: "#64748b",
-                  margin: "0 0 2px",
+                  color: palette.textFaint,
+                  margin: "0 0 4px",
                 }}
               >
                 {row.label}
               </p>
               <p
                 style={{
-                  fontSize: "13px",
-                  color: "#f1f5f9",
+                  fontSize: "13.5px",
+                  color: palette.textPrimary,
                   margin: 0,
                   fontWeight: 600,
                 }}
@@ -407,14 +513,31 @@ export default function Pengaturan() {
   if (loading) {
     return (
       <div>
+        <GlobalAnim />
         <PageHeader title="Pengaturan" sub="Kelola profil usaha dan akun admin." />
         <div
           style={{
-            color: "#64748b",
-            fontSize: "14px",
+            display: "flex",
+            alignItems: "center",
+            gap: "10px",
+            color: palette.textMuted,
+            fontSize: "13.5px",
             marginTop: "40px",
+            ...fadeIn,
           }}
         >
+          <span
+            style={{
+              width: "14px",
+              height: "14px",
+              borderRadius: "50%",
+              border: `2px solid ${palette.border}`,
+              borderTopColor: palette.gold,
+              display: "inline-block",
+              animation: "spin 0.8s linear infinite",
+            }}
+          />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
           Memuat pengaturan...
         </div>
       </div>
@@ -437,8 +560,15 @@ export default function Pengaturan() {
   }
 
   // ── Edit mode ───────────────────────────────────────────────────────────────
+  const tabMeta: { key: typeof tab; label: string }[] = [
+    { key: "profil", label: "Profil Usaha" },
+    { key: "akun", label: "Akun Admin" },
+    { key: "kebijakan", label: "Kebijakan Sewa" },
+  ];
+
   return (
     <div>
+      <GlobalAnim />
       <PageHeader title="Pengaturan" sub="Kelola profil usaha dan akun admin." />
       <SuccessToast msg={saved ? "Pengaturan berhasil disimpan!" : ""} />
 
@@ -447,63 +577,70 @@ export default function Pengaturan() {
         style={{
           display: "flex",
           gap: "4px",
-          background: "#0f172a",
-          border: "1px solid #1e293b",
-          borderRadius: "10px",
-          padding: "4px",
-          marginBottom: "24px",
+          background: palette.bgPanel,
+          border: `1px solid ${palette.border}`,
+          borderRadius: "12px",
+          padding: "5px",
+          marginBottom: "26px",
           width: "fit-content",
+          boxShadow: "0 10px 24px -18px rgba(0,0,0,0.6)",
         }}
       >
-        {(["profil", "akun", "kebijakan"] as const).map((t) => (
+        {tabMeta.map(({ key, label }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={key}
+            onClick={() => setTab(key)}
             style={{
-              padding: "8px 18px",
-              borderRadius: "7px",
+              padding: "9px 20px",
+              borderRadius: "8px",
               border: "none",
               fontSize: "13px",
               fontWeight: 600,
               cursor: "pointer",
-              background: tab === t ? "#f59e0b" : "transparent",
-              color: tab === t ? "#0f0f0f" : "#64748b",
+              background:
+                tab === key
+                  ? `linear-gradient(135deg, ${palette.gold}, #b8924f)`
+                  : "transparent",
+              color: tab === key ? "#1a1208" : palette.textMuted,
               fontFamily: "inherit",
-              transition: "all 0.15s",
-              textTransform: "capitalize",
+              transition: "all 0.2s ease",
+              letterSpacing: "0.1px",
+            }}
+            onMouseEnter={(e) => {
+              if (tab !== key) {
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  palette.textPrimary;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (tab !== key) {
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  palette.textMuted;
+              }
             }}
           >
-            {t === "profil"
-              ? "Profil Usaha"
-              : t === "akun"
-              ? "Akun Admin"
-              : "Kebijakan Sewa"}
+            {label}
           </button>
         ))}
       </div>
 
       <div
+        key={tab}
         style={{
-          background: "#0f172a",
-          border: "1px solid #1e293b",
-          borderRadius: "14px",
-          padding: "28px",
-          maxWidth: "600px",
+          background: palette.bgPanel,
+          border: `1px solid ${palette.border}`,
+          borderRadius: "16px",
+          padding: "32px",
+          maxWidth: "620px",
+          boxShadow:
+            "0 1px 0 rgba(255,255,255,0.03) inset, 0 24px 48px -28px rgba(0,0,0,0.65)",
+          ...fadeIn,
         }}
       >
         {/* ── Profil Tab ── */}
         {tab === "profil" && (
           <div>
-            <h2
-              style={{
-                fontSize: "15px",
-                fontWeight: 700,
-                color: "#f1f5f9",
-                marginBottom: "20px",
-              }}
-            >
-              Informasi Usaha
-            </h2>
+            <SectionLabel>Informasi Usaha</SectionLabel>
             <Field label="Nama Usaha" required>
               <Input
                 value={profile.businessName}
@@ -573,16 +710,7 @@ export default function Pengaturan() {
         {/* ── Akun Tab ── */}
         {tab === "akun" && (
           <div>
-            <h2
-              style={{
-                fontSize: "15px",
-                fontWeight: 700,
-                color: "#f1f5f9",
-                marginBottom: "20px",
-              }}
-            >
-              Manajemen Akun Admin
-            </h2>
+            <SectionLabel>Manajemen Akun Admin</SectionLabel>
             <Field label="Nama Admin">
               <Input
                 value={admin.name}
@@ -628,8 +756,8 @@ export default function Pengaturan() {
               admin.password !== admin.confirm && (
                 <p
                   style={{
-                    fontSize: "13px",
-                    color: "#f87171",
+                    fontSize: "12.5px",
+                    color: palette.danger,
                     marginTop: "-8px",
                     marginBottom: "12px",
                   }}
@@ -643,16 +771,7 @@ export default function Pengaturan() {
         {/* ── Kebijakan Tab ── */}
         {tab === "kebijakan" && (
           <div>
-            <h2
-              style={{
-                fontSize: "15px",
-                fontWeight: 700,
-                color: "#f1f5f9",
-                marginBottom: "20px",
-              }}
-            >
-              Kebijakan Penyewaan
-            </h2>
+            <SectionLabel>Kebijakan Penyewaan</SectionLabel>
             <Field label="Metode Perhitungan Tarif">
               <Select
                 value={policy.rateMethod}
@@ -708,13 +827,14 @@ export default function Pengaturan() {
         {error && (
           <p
             style={{
-              fontSize: "13px",
-              color: "#f87171",
-              marginTop: "8px",
-              padding: "10px 14px",
-              background: "rgba(248,113,113,0.08)",
-              borderRadius: "8px",
-              border: "1px solid rgba(248,113,113,0.2)",
+              fontSize: "12.5px",
+              color: palette.danger,
+              marginTop: "10px",
+              padding: "11px 15px",
+              background: "rgba(224,133,133,0.07)",
+              borderRadius: "9px",
+              border: "1px solid rgba(224,133,133,0.2)",
+              ...fadeIn,
             }}
           >
             {error}
@@ -724,9 +844,9 @@ export default function Pengaturan() {
         {/* Action buttons */}
         <div
           style={{
-            marginTop: "24px",
-            paddingTop: "20px",
-            borderTop: "1px solid #1e293b",
+            marginTop: "26px",
+            paddingTop: "22px",
+            borderTop: `1px solid ${palette.borderSoft}`,
             display: "flex",
             alignItems: "center",
             gap: "12px",
@@ -741,26 +861,28 @@ export default function Pengaturan() {
             <button
               onClick={() => setViewMode(true)}
               style={{
-                padding: "8px 16px",
+                padding: "9px 18px",
                 background: "transparent",
-                border: "1px solid #334155",
-                borderRadius: "8px",
-                color: "#64748b",
-                fontSize: "13px",
+                border: `1px solid ${palette.border}`,
+                borderRadius: "9px",
+                color: palette.textMuted,
+                fontSize: "12.5px",
                 fontWeight: 600,
                 cursor: "pointer",
                 fontFamily: "inherit",
-                transition: "all 0.15s",
+                transition: "all 0.2s ease",
               }}
               onMouseEnter={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.color = "#f1f5f9";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  palette.gold;
                 (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "#64748b";
+                  palette.goldBorder;
               }}
               onMouseLeave={(e) => {
-                (e.currentTarget as HTMLButtonElement).style.color = "#64748b";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  palette.textMuted;
                 (e.currentTarget as HTMLButtonElement).style.borderColor =
-                  "#334155";
+                  palette.border;
               }}
             >
               Lihat Profil

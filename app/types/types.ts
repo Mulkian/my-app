@@ -1,4 +1,4 @@
-// types/index.ts
+// types/types.ts
 
 export interface Vehicle {
   id: string;
@@ -28,11 +28,14 @@ export interface Customer {
   address: string;
   id_type: string;
   id_number: string;
-  ktp_photo_url?: string | null; // ← foto KTP di Supabase Storage
+  ktp_photo_url?: string | null;
+  ktp_url?: string | null;       // ← tambah
+  sim_url?: string | null;       // ← tambah
   total_rent?: number;
   join_date?: string;
   status?: string;
   created_at?: string;
+  source?: "manual" | "booking" | null;  // ← tambah
 }
 
 export interface Rental {
@@ -64,8 +67,12 @@ export interface Return {
   vehicle_id: string;
   return_date: string;
   due_date: string;
+  total_cost: number;   // ← total biaya sewa
   late_days: number;
   late_fee: number;
+  damage_fee: number;   // ← biaya kerusakan
+  damage_desc: string;  // ← keterangan kerusakan
+  notes: string;        // ← catatan tambahan
   condition: string;
   status: "Selesai" | "Diproses";
   created_at?: string;
