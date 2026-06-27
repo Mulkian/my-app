@@ -145,8 +145,8 @@ export default function ProfilPage({ user, profil, setProfil, rentals }: Props) 
           <div style={{ background: CARD_BG, borderRadius: 14, border: `0.5px solid ${CARD_BORDER}`, padding: 20 }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginBottom: 16 }}>Kontak Kami</h3>
             {[
-              { icon: <Icons.Phone size={14} />, text: "0821-xxxx-xxxx" },
-              { icon: <Icons.Mail size={14} />, text: "walid@rentcar.id" },
+              { icon: <Icons.Phone size={14} />, text: "0812-6028-4230" },
+              { icon: <Icons.Mail size={14} />, text: "info@walidrentcaraceh.online" },
               { icon: <Icons.MessageCircle size={14} />, text: "Live Chat (jam kerja)" },
             ].map((c, i) => (
               <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10, fontSize: 12, color: TEXT_MUTED }}>

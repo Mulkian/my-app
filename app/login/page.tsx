@@ -157,7 +157,7 @@ export default function LoginPage() {
           </div>
 
           <p style={{ textAlign:"center", marginTop:"20px", fontSize:"12px", color:"#334155" }}>
-            © 2024 CarRent Pro · Semua data dienkripsi & aman
+            © 2026 CarRent Pro · Semua data dienkripsi & aman
           </p>
         </div>
       </div>

@@ -64,9 +64,9 @@ export default function BantuanPage({ userEmail }: Props) {
           <div style={{ background: CARD_BG, borderRadius: 14, border: `0.5px solid ${CARD_BORDER}`, padding: 20 }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginBottom: 16 }}>Hubungi Kami</h3>
             {[
-              { icon: <Icons.Phone size={15} />, label: "Telepon", value: "0821-xxxx-xxxx", sub: "Senin–Sabtu, 08.00–17.00" },
-              { icon: <Icons.MessageCircle size={15} />, label: "WhatsApp", value: "0821-xxxx-xxxx", sub: "Respon cepat" },
-              { icon: <Icons.Mail size={15} />, label: "Email", value: "walid@rentcar.id", sub: "Balasan 1×24 jam" },
+              { icon: <Icons.Phone size={15} />, label: "Telepon", value: "0812-6028-4230", sub: "Senin–Sabtu, 08.00–17.00" },
+              { icon: <Icons.MessageCircle size={15} />, label: "WhatsApp", value: "0812-6028-4230", sub: "Respon cepat" },
+              { icon: <Icons.Mail size={15} />, label: "Email", value: "info@walidrentcaraceh.online", sub: "Balasan 1×24 jam" },
             ].map((c) => (
               <div key={c.label} style={{ display: "flex", gap: 12, marginBottom: 14 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 8, background: "rgba(245,158,11,0.12)", color: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -129,11 +129,12 @@ export default function BantuanPage({ userEmail }: Props) {
           <div style={{ background: CARD_BG, borderRadius: 14, border: `0.5px solid ${CARD_BORDER}`, padding: 20 }}>
             <h3 style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginBottom: 12 }}>Lokasi Kantor</h3>
             <p style={{ fontSize: 13, color: TEXT_MUTED, lineHeight: 1.7 }}>
-              Jl. Contoh No. 123, Banda Aceh,<br />
-              Aceh, 23111<br /><br />
+              Lr. Lampoh Balee II No. 18,<br />
+                  Tj. Selamat, Kec. Darussalam,<br />
+                  Kab. Aceh Besar, Aceh 23373<br />
               <strong style={{ color: TEXT_PRIMARY }}>Jam Operasional:</strong><br />
-              Senin – Sabtu: 08.00 – 17.00<br />
-              Minggu: Tutup
+               Senin – Sabtu: 08.00 – 20.00<br />
+                  Minggu: 09.00 – 17.00
             </p>
           </div>
         </div>

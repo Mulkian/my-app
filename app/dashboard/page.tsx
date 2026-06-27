@@ -112,9 +112,10 @@ export default function DashboardPage() {
           minHeight: "100vh",
         }}>
           <Topbar
-            activePage={activePage}
-            onToggle={() => setSidebarOpen((p) => !p)}
-          />
+      activePage={activePage}
+      onToggle={() => setSidebarOpen((p) => !p)}
+      onNavigate={setActivePage}
+      />
 
           <main
             key={activePage}
@@ -136,7 +137,7 @@ export default function DashboardPage() {
             alignItems: "center",
           }}>
             <span style={{ fontSize: "12px", color: "#334155" }}>
-              © 2024 Walid Rent Car Management System
+              © 2026 Walid Rent Car Management System
             </span>
             <span style={{ fontSize: "12px", color: "#334155" }}>v3.0.0</span>
           </footer>
