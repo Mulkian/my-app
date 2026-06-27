@@ -26,8 +26,13 @@ export default function DashboardPage() {
   // Guard: hanya admin yang boleh masuk
   useEffect(() => {
     const check = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.replace("/login"); return; }
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/login");
+        return;
+      }
 
       const { data } = await supabase
         .from("user_roles")
@@ -48,30 +53,53 @@ export default function DashboardPage() {
 
   const renderPage = () => {
     switch (activePage) {
-      case "dashboard":   return <Dashboard />;
-      case "armada":      return <Armada />;
-      case "penyewaan":   return <Penyewaan />;
-      case "pengembalian":return <Pengembalian />;
-      case "pelanggan":   return <Pelanggan />;
-      case "pembayaran":  return <Pembayaran />;
-      case "laporan":     return <Laporan />;
-      case "pengaturan":  return <Pengaturan />;
-      default:            return <Dashboard />;
+      case "dashboard":
+        return <Dashboard />;
+      case "armada":
+        return <Armada />;
+      case "penyewaan":
+        return <Penyewaan />;
+      case "pengembalian":
+        return <Pengembalian />;
+      case "pelanggan":
+        return <Pelanggan />;
+      case "pembayaran":
+        return <Pembayaran />;
+      case "laporan":
+        return <Laporan />;
+      case "pengaturan":
+        return <Pengaturan />;
+      default:
+        return <Dashboard />;
     }
   };
 
   // Tampilkan loading selagi cek role
   if (checking) {
     return (
-      <div style={{
-        minHeight: "100vh", background: "#070c17",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        flexDirection: "column", gap: 14,
-        fontFamily: "'Outfit', sans-serif", color: "#f1f5f9",
-      }}>
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none"
-          stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round"
-          style={{ animation: "spin 0.7s linear infinite" }}>
+      <div
+        style={{
+          minHeight: "100vh",
+          background: "#070c17",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          flexDirection: "column",
+          gap: 14,
+          fontFamily: "'Outfit', sans-serif",
+          color: "#f1f5f9",
+        }}
+      >
+        <svg
+          width="28"
+          height="28"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="#f59e0b"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          style={{ animation: "spin 0.7s linear infinite" }}
+        >
           <path d="M21 12a9 9 0 1 1-6.219-8.56" />
         </svg>
         <p style={{ fontSize: 13, color: "#475569" }}>Memeriksa akses…</p>
@@ -96,26 +124,30 @@ export default function DashboardPage() {
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
-      <div style={{ display: "flex", minHeight: "100vh", background: "#070c17" }}>
+      <div
+        style={{ display: "flex", minHeight: "100vh", background: "#070c17" }}
+      >
         <Sidebar
           activePage={activePage}
           onNavigate={setActivePage}
           open={sidebarOpen}
         />
 
-        <div style={{
-          flex: 1,
-          marginLeft: sidebarOpen ? "240px" : "68px",
-          transition: "margin-left 0.25s ease",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: "100vh",
-        }}>
+        <div
+          style={{
+            flex: 1,
+            marginLeft: sidebarOpen ? "240px" : "68px",
+            transition: "margin-left 0.25s ease",
+            display: "flex",
+            flexDirection: "column",
+            minHeight: "100vh",
+          }}
+        >
           <Topbar
-      activePage={activePage}
-      onToggle={() => setSidebarOpen((p) => !p)}
-      onNavigate={setActivePage}
-      />
+            activePage={activePage}
+            onToggle={() => setSidebarOpen((p) => !p)}
+            onNavigate={setActivePage}
+          />
 
           <main
             key={activePage}
@@ -129,13 +161,15 @@ export default function DashboardPage() {
             {renderPage()}
           </main>
 
-          <footer style={{
-            padding: "14px 28px",
-            borderTop: "1px solid #1e293b",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-          }}>
+          <footer
+            style={{
+              padding: "14px 28px",
+              borderTop: "1px solid #1e293b",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
             <span style={{ fontSize: "12px", color: "#334155" }}>
               © 2026 Walid Rent Car Management System
             </span>
