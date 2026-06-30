@@ -84,10 +84,9 @@ export default function RegisterPage() {
 
     // Jika email confirmation dimatikan di Supabase → langsung dapat session
     if (data.session) {
-      router.push("/portal"); // user selalu ke /portal
-    } else {
-      setSuccess(true);
+      await supabase.auth.signOut();
     }
+    setSuccess(true);
     setLoading(false);
   };
 

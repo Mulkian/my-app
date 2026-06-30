@@ -25,7 +25,6 @@ import {
   TEXT_PRIMARY,
   TEXT_MUTED,
   TOPBAR_BG,
-  MOCK_NOTIFS,
 } from "@/lib/constants";
 import { fmt } from "@/lib/utils";
 
@@ -56,6 +55,20 @@ const NAV_ITEMS: { id: NavId; label: string; icon: ReactNode }[] = [
   { id: "bantuan", label: "Bantuan", icon: <Icons.Help /> },
 ];
 
+// ─── Helper: format waktu relatif dari timestamp ───────────────
+function formatRelativeTime(iso: string): string {
+  const date = new Date(iso);
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Baru saja";
+  if (diffMin < 60) return `${diffMin} menit lalu`;
+  const diffHour = Math.floor(diffMin / 60);
+  if (diffHour < 24) return `${diffHour} jam lalu`;
+  const diffDay = Math.floor(diffHour / 24);
+  if (diffDay < 7) return `${diffDay} hari lalu`;
+  return date.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+}
+
 // ─── Root Component ───────────────────────────────────────────
 export default function PortalPage() {
   const router = useRouter();
@@ -68,7 +81,7 @@ export default function PortalPage() {
   const [sidebarOpen, setSidebar] = useState(true);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [preselectedRental, setPreselectedRental] = useState<Rental | null>(null);
-  const [notifs, setNotifs] = useState<Notification[]>(MOCK_NOTIFS);
+  const [notifs, setNotifs] = useState<Notification[]>([]);
   const [profil, setProfil] = useState<ProfilState>({
     name: "", phone: "", address: "", nik: "", emergency: "",
   });
@@ -80,12 +93,19 @@ export default function PortalPage() {
       if (!session) { router.replace("/login"); return; }
       setUser(session.user);
 
-      const [{ data: v }, { data: r }] = await Promise.all([
+      const [{ data: v }, { data: r }, { data: notifData }] = await Promise.all([
         supabase.from("vehicles").select("*, photo_url").order("name"),
         supabase.from("rentals").select("*").eq("customer_id", session.user.id).order("created_at", { ascending: false }),
+        supabase.from("notifications").select("*").eq("user_id", session.user.id).order("created_at", { ascending: false }),
       ]);
       setVehicles(v ?? []);
       setRentals(r ?? []);
+      setNotifs(
+        (notifData ?? []).map((n: any) => ({
+          ...n,
+          time: formatRelativeTime(n.created_at),
+        })),
+      );
 
       const { data: cust } = await supabase
         .from("customers").select("name,phone,address").eq("id", session.user.id).single();
@@ -119,11 +139,25 @@ export default function PortalPage() {
   }, []);
 
   // ── Helpers ───────────────────────────────────────────────────
-  const pushNotif = (type: Notification["type"], title: string, message: string) =>
-    setNotifs((prev) => [
-      { id: Date.now().toString(), type, title, message, time: "Baru saja", read: false },
-      ...prev,
-    ]);
+  // Insert notifikasi ke Supabase (persist per user) lalu update state lokal
+  const pushNotif = async (type: Notification["type"], title: string, message: string) => {
+    if (!user) return;
+    const { data, error } = await supabase
+      .from("notifications")
+      .insert({ user_id: user.id, type, title, message, read: false })
+      .select()
+      .single();
+
+    if (error || !data) {
+      // fallback: tetap tampilkan di UI walau insert gagal, supaya user tidak kehilangan info
+      setNotifs((prev) => [
+        { id: Date.now().toString(), type, title, message, time: "Baru saja", read: false } as Notification,
+        ...prev,
+      ]);
+      return;
+    }
+    setNotifs((prev) => [{ ...data, time: "Baru saja" }, ...prev]);
+  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -210,8 +244,16 @@ export default function PortalPage() {
         return (
           <NotifikasiPage
             notifs={notifs}
-            onMarkRead={(id: string) => setNotifs((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n)))}
-            onMarkAllRead={() => setNotifs((p) => p.map((n) => ({ ...n, read: true })))}
+            onMarkRead={async (id: string) => {
+              setNotifs((p) => p.map((n) => (n.id === id ? { ...n, read: true } : n)));
+              await supabase.from("notifications").update({ read: true }).eq("id", id);
+            }}
+            onMarkAllRead={async () => {
+              setNotifs((p) => p.map((n) => ({ ...n, read: true })));
+              if (user) {
+                await supabase.from("notifications").update({ read: true }).eq("user_id", user.id).eq("read", false);
+              }
+            }}
           />
         );
       case "profil":
