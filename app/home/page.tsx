@@ -294,7 +294,7 @@ export default function HomePage() {
             />
           </div>
           {[
-            { id: "trans", val: filterTrans, set: setFilterTrans, opts: [["", "Semua Transmisi"], ["Matic", "Matic"], ["Manual", "Manual"]] },
+            { id: "trans", val: filterTrans, set: setFilterTrans, opts: [["", "Semua Transmisi"], ["Otomatis", "Otomatis"], ["Manual", "Manual"]] },
             { id: "sort", val: sortBy, set: setSortBy, opts: [["name", "Nama A–Z"], ["rate_asc", "Harga ↑"], ["rate_desc", "Harga ↓"]] },
           ].map((f) => (
             <select
