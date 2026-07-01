@@ -206,38 +206,63 @@ setBookLoading(false);
 
   // ── Success screen ────────────────────────────────────────
   if (bookStep === 4 && bookSuccess) {
-    return (
-      <div>
-        <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
-        <StepIndicator current={4} />
-        <div style={{ background: CARD_BG, borderRadius: 16, border: `0.5px solid ${CARD_BORDER}`, padding: "48px 32px", textAlign: "center" }}>
-          <div style={{ width: 72, height: 72, borderRadius: "50%", background: "rgba(34,197,94,0.12)", border: "2px solid rgba(34,197,94,0.3)", color: "#4ade80", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
-            <Icons.CheckCircle size={32} />
-          </div>
-          <h2 style={{ fontSize: 22, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 8 }}>Booking Berhasil Dibuat!</h2>
-          <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 24 }}>Dokumen identitas Anda telah tersimpan dengan aman.</p>
+  return (
+    <div>
+      <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
+      <StepIndicator current={4} />
+      <div style={{ background: CARD_BG, borderRadius: 16, border: `0.5px solid ${CARD_BORDER}`, padding: "48px 32px", textAlign: "center" }}>
 
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "28px auto", maxWidth: 420 }}>
-            <TrackerStep icon="✓" label="Booking Dibuat" active done />
-            <div style={{ flex: 1, height: 2, background: "rgba(245,158,11,0.4)", position: "relative", top: -14 }} />
-            <TrackerStep icon="⏳" label="Konfirmasi Admin" active pulse />
-            <div style={{ flex: 1, height: 2, background: "rgba(255,255,255,0.06)", position: "relative", top: -14 }} />
-            <TrackerStep icon="🚗" label="Sewa Aktif" />
-          </div>
+        {/* Icon animasi menunggu */}
+        <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(245,158,11,0.12)", border: "2px solid rgba(245,158,11,0.4)", color: "#fbbf24", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 36 }}>
+          ⏳
+        </div>
 
-          <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 12, padding: "14px 18px", marginBottom: 24, fontSize: 13, color: "#fbbf24", textAlign: "left", lineHeight: 1.6 }}>
-            <strong>⏳ Status: Menunggu Konfirmasi Admin</strong><br />
-            Admin akan memverifikasi booking dan dokumen Anda dalam maks. <strong>1×24 jam</strong>. Setelah dikonfirmasi, status otomatis berubah menjadi <strong>Aktif</strong>.
-          </div>
+        <h2 style={{ fontSize: 22, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 8 }}>
+          Booking Berhasil Dikirim!
+        </h2>
+        <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 28 }}>
+          Dokumen identitas Anda telah tersimpan. Tunggu konfirmasi dari admin.
+        </p>
 
-          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-            <button onClick={resetBooking} style={btnSecondary}>Booking Lagi</button>
-            <button onClick={() => onNavigate("riwayat")} style={btnPrimary}>Lihat Riwayat</button>
+        {/* Progress tracker */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 auto 28px", maxWidth: 420 }}>
+          <TrackerStep icon="✓"  label="Booking Dibuat"    active done />
+          <div style={{ flex: 1, height: 2, background: "rgba(245,158,11,0.4)", position: "relative", top: -14 }} />
+          <TrackerStep icon="⏳" label="Konfirmasi Admin"  active pulse />
+          <div style={{ flex: 1, height: 2, background: "rgba(255,255,255,0.06)", position: "relative", top: -14 }} />
+          <TrackerStep icon="💳" label="Pembayaran" />
+          <div style={{ flex: 1, height: 2, background: "rgba(255,255,255,0.06)", position: "relative", top: -14 }} />
+          <TrackerStep icon="🚗" label="Sewa Aktif" />
+        </div>
+
+        {/* Status info box */}
+        <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 12, padding: "18px 22px", marginBottom: 28, textAlign: "left", lineHeight: 1.7 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24", marginBottom: 8 }}>⏳ Status: Menunggu Konfirmasi Admin</p>
+          <p style={{ fontSize: 13, color: "#fbbf24", opacity: 0.85 }}>
+            Admin akan memverifikasi booking dan dokumen Anda dalam maks. <strong>1×24 jam</strong>.
+          </p>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(245,158,11,0.2)" }}>
+            <p style={{ fontSize: 12, color: TEXT_MUTED, marginBottom: 4 }}>Setelah dikonfirmasi, Anda akan bisa:</p>
+            <p style={{ fontSize: 12, color: "#94a3b8" }}>✓ Melanjutkan pembayaran</p>
+            <p style={{ fontSize: 12, color: "#94a3b8" }}>✓ Melihat detail kendaraan yang disewa</p>
           </div>
         </div>
+
+        {/* Info jika ditolak */}
+        <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, padding: "14px 18px", marginBottom: 28, textAlign: "left" }}>
+          <p style={{ fontSize: 12, color: "#f87171", lineHeight: 1.6 }}>
+            ❌ <strong>Jika booking ditolak</strong>, status akan berubah menjadi <strong>Dibatalkan</strong> dan Anda dapat melakukan booking ulang dengan kendaraan lain.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <button onClick={resetBooking}            style={btnSecondary}>Booking Lagi</button>
+          <button onClick={() => onNavigate("riwayat")} style={btnPrimary}>Cek Status Booking</button>
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   // ── Main layout ───────────────────────────────────────────
   return (

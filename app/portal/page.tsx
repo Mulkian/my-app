@@ -43,7 +43,6 @@ import ProfilPage from "./components/Profilepage";
 import BantuanPage from "./components/Bantuanpage";
 
 // ─── Nav config ───────────────────────────────────────────────
-// Gunakan ReactNode bukan JSX.Element untuk menghindari error "Cannot find namespace JSX"
 const NAV_ITEMS: { id: NavId; label: string; icon: ReactNode }[] = [
   { id: "home", label: "Beranda", icon: <Icons.Home /> },
   { id: "katalog", label: "Katalog", icon: <Icons.Catalog /> },
@@ -100,6 +99,7 @@ export default function PortalPage() {
       ]);
       setVehicles(v ?? []);
       setRentals(r ?? []);
+      console.log("📦 INIT rentals:", r);
       setNotifs(
         (notifData ?? []).map((n: any) => ({
           ...n,
@@ -107,8 +107,9 @@ export default function PortalPage() {
         })),
       );
 
+      // Gunakan maybeSingle() supaya tidak error 406 kalau row belum ada
       const { data: cust } = await supabase
-        .from("customers").select("name,phone,address").eq("id", session.user.id).single();
+        .from("customers").select("name,phone,address").eq("id", session.user.id).maybeSingle();
       setProfil(
         cust
           ? { name: cust.name ?? "", phone: cust.phone ?? "", address: cust.address ?? "", nik: "", emergency: "" }
@@ -124,6 +125,7 @@ export default function PortalPage() {
     const channel = supabase
       .channel("portal-rentals-realtime")
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rentals" }, (payload) => {
+        console.log("🔔 REALTIME EVENT MASUK:", payload);
         setRentals((prev) =>
           prev.map((r) => r.id === payload.new.id ? { ...r, ...(payload.new as Rental) } : r),
         );
@@ -134,12 +136,13 @@ export default function PortalPage() {
           pushNotif("error", "Booking Ditolak", `Maaf, booking ${payload.new.vehicle_name} Anda ditolak admin.`);
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log("📡 STATUS CHANNEL rentals:", status);
+      });
     return () => { supabase.removeChannel(channel); };
   }, []);
 
   // ── Helpers ───────────────────────────────────────────────────
-  // Insert notifikasi ke Supabase (persist per user) lalu update state lokal
   const pushNotif = async (type: Notification["type"], title: string, message: string) => {
     if (!user) return;
     const { data, error } = await supabase
@@ -149,7 +152,6 @@ export default function PortalPage() {
       .single();
 
     if (error || !data) {
-      // fallback: tetap tampilkan di UI walau insert gagal, supaya user tidak kehilangan info
       setNotifs((prev) => [
         { id: Date.now().toString(), type, title, message, time: "Baru saja", read: false } as Notification,
         ...prev,
@@ -164,8 +166,6 @@ export default function PortalPage() {
     router.replace("/login");
   };
 
-  // navigate bertipe (string) => void agar kompatibel dengan semua komponen
-  // yang mendeklarasikan onNavigate: (page: string) => void
   const navigate = (target: string) => setPage(target as NavId);
 
   // ── Derived ───────────────────────────────────────────────────
@@ -288,7 +288,6 @@ export default function PortalPage() {
 
         {/* ── Sidebar ──────────────────────────────────────────── */}
         <div style={{ width: sidebarOpen ? 224 : 64, minHeight: "100vh", background: SIDEBAR_BG, borderRight: `1px solid ${CARD_BORDER}`, display: "flex", flexDirection: "column", transition: "width 0.22s ease", overflow: "hidden", position: "fixed", top: 0, left: 0, zIndex: 50 }}>
-          {/* Brand */}
           <div style={{ padding: "18px 14px", borderBottom: `1px solid ${CARD_BORDER}`, display: "flex", alignItems: "center", gap: 10 }}>
             <BrandIcon size={36} />
             {sidebarOpen && (
@@ -305,7 +304,6 @@ export default function PortalPage() {
             </div>
           )}
 
-          {/* Nav items */}
           <nav style={{ flex: 1, padding: "8px 8px", overflowY: "auto" }}>
             {NAV_ITEMS.map((n) => (
               <button key={n.id} className={`nav-btn ${page === n.id ? "active" : ""}`} onClick={() => setPage(n.id)}>
@@ -321,7 +319,6 @@ export default function PortalPage() {
             ))}
           </nav>
 
-          {/* User + logout */}
           <div style={{ borderTop: `1px solid ${CARD_BORDER}` }}>
             {sidebarOpen && (
               <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10 }}>
@@ -349,7 +346,6 @@ export default function PortalPage() {
 
         {/* ── Main content ──────────────────────────────────────── */}
         <div style={{ flex: 1, marginLeft: sidebarOpen ? 224 : 64, transition: "margin-left 0.22s ease", display: "flex", flexDirection: "column", minHeight: "100vh" }}>
-          {/* Topbar */}
           <div style={{ height: 54, background: TOPBAR_BG, borderBottom: `1px solid ${CARD_BORDER}`, display: "flex", alignItems: "center", padding: "0 24px", gap: 14, position: "sticky", top: 0, zIndex: 40 }}>
             <button onClick={() => setSidebar((p) => !p)} style={{ background: "none", border: "none", color: TEXT_MUTED, cursor: "pointer", padding: 4, display: "flex", flexShrink: 0 }}>
               <Icons.Menu />
@@ -362,7 +358,6 @@ export default function PortalPage() {
                 {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
               </span>
             </div>
-            {/* Bell */}
             <button onClick={() => setPage("notifikasi")} style={{ position: "relative", background: "none", border: "none", cursor: "pointer", padding: 4, display: "flex" }}>
               <Icons.BellTopbar unread={unread} />
               {unread > 0 && (
@@ -371,7 +366,6 @@ export default function PortalPage() {
                 </span>
               )}
             </button>
-            {/* Avatar */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#1a2540", borderRadius: 8, padding: "5px 10px 5px 5px" }}>
               <div style={{ width: 28, height: 28, borderRadius: "50%", background: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#fff" }}>
                 {profil_initial}
@@ -383,12 +377,10 @@ export default function PortalPage() {
             </div>
           </div>
 
-          {/* Page content */}
           <main key={page} style={{ flex: 1, padding: 24, animation: "fadeUp 0.18s ease" }}>
             {renderPage()}
           </main>
 
-          {/* Footer */}
           <footer style={{ padding: "14px 24px", borderTop: `1px solid ${CARD_BORDER}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 12, color: TEXT_MUTED }}>© 2026 Walid Rent Car Aceh. Hak cipta dilindungi.</span>
             <span style={{ fontSize: 12, color: TEXT_MUTED }}>v2.1</span>
