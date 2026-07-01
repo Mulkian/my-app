@@ -27,25 +27,39 @@ export default function RiwayatPage({ vehicles, onPayNow }: Props) {
 
   // ── Fetch rentals milik user yang sedang login saja ──────────────────────
   useEffect(() => {
-    const fetchMyRentals = async () => {
-      setLoading(true);
+  const fetchMyRentals = async () => {
+    setLoading(true);
 
-      const { data: { user }, error: authErr } = await supabase.auth.getUser();
-      if (authErr || !user) { setLoading(false); return; }
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr || !user) { setLoading(false); return; }
 
-      const { data, error } = await supabase
-        .from("rentals")
-        .select("*")
-        .eq("user_id", user.id)          // ← hanya milik user ini
-        .order("created_at", { ascending: false });
+    // Cari customer yang emailnya cocok dengan user login
+    const { data: customer } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("email", user.email)
+      .single();
 
-      if (!error) setRentals(data ?? []);
+    if (!customer) {
+      // User belum punya data customer
+      setRentals([]);
       setLoading(false);
-    };
+      return;
+    }
 
-    fetchMyRentals();
-  }, []);
+    // Ambil rentals berdasarkan customer_id
+    const { data, error } = await supabase
+      .from("rentals")
+      .select("*")
+      .eq("customer_id", customer.id)
+      .order("created_at", { ascending: false });
 
+    if (!error) setRentals(data ?? []);
+    setLoading(false);
+  };
+
+  fetchMyRentals();
+}, []);
   const getVehicleByName = (name: string) =>
     vehicles.find((v) => v.name === name) ?? { name, photo_url: undefined };
 
