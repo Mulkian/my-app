@@ -25,6 +25,18 @@ export default function Penyewaan() {
   const [rentalToConfirm, setRentalToConfirm] = useState<Rental | null>(null);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
 
+  // State untuk edit & hapus
+  const [editRental, setEditRental] = useState<Rental | null>(null);
+  const [editForm, setEditForm] = useState({
+    start_date: "", days: 1, notes: "",
+    payment_status: "Belum Bayar" as Rental["payment_status"],
+    status: "Aktif" as Rental["status"],
+  });
+  const [editErr, setEditErr] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Rental | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     const [r, v, c] = await Promise.all([
@@ -145,6 +157,89 @@ export default function Penyewaan() {
     setVehicles(p => p.map(v => v.id === vehicleId ? { ...v, status: "Tersedia" } : v));
   };
 
+  // ── Edit transaksi ────────────────────────────────────────────
+  const openEdit = (r: Rental) => {
+    setEditRental(r);
+    setEditForm({
+      start_date: r.start_date,
+      days: r.days,
+      notes: r.notes ?? "",
+      payment_status: r.payment_status,
+      status: r.status,
+    });
+    setEditErr("");
+  };
+
+  const editEndDate = editRental && editForm.start_date
+    ? new Date(new Date(editForm.start_date).getTime() + editForm.days * 86400000).toISOString().split("T")[0]
+    : "";
+  const editTotalCost = editRental ? editRental.rate * editForm.days : 0;
+
+  const handleEditSave = async () => {
+    if (!editRental) return;
+    if (!editForm.start_date || editForm.days < 1) {
+      setEditErr("Tanggal mulai dan durasi wajib diisi dengan benar.");
+      return;
+    }
+    setEditSaving(true);
+    setEditErr("");
+
+    const { data: updated, error } = await supabase
+      .from("rentals")
+      .update({
+        start_date: editForm.start_date,
+        end_date: editEndDate,
+        days: editForm.days,
+        total_cost: editTotalCost,
+        notes: editForm.notes,
+        payment_status: editForm.payment_status,
+        status: editForm.status,
+      })
+      .eq("id", editRental.id)
+      .select()
+      .single();
+
+    if (error) {
+      setEditErr(error.message);
+      setEditSaving(false);
+      return;
+    }
+
+    setRentals((prev) => prev.map((r) => (r.id === editRental.id ? { ...r, ...updated } : r)));
+
+    // Sinkronkan status kendaraan kalau status sewa berubah
+    if (editRental.status !== editForm.status && editRental.vehicle_id) {
+      const vehicleStatus =
+        editForm.status === "Aktif" ? "Disewa" :
+        editForm.status === "Selesai" || editForm.status === "Dibatalkan" ? "Tersedia" : null;
+      if (vehicleStatus) {
+        await supabase.from("vehicles").update({ status: vehicleStatus }).eq("id", editRental.vehicle_id);
+        setVehicles((prev) => prev.map((v) => (v.id === editRental.vehicle_id ? { ...v, status: vehicleStatus } : v)));
+      }
+    }
+
+    setEditSaving(false);
+    setEditRental(null);
+  };
+
+  // ── Hapus transaksi ───────────────────────────────────────────
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await supabase.from("rentals").delete().eq("id", deleteTarget.id);
+
+    if (!error) {
+      setRentals((prev) => prev.filter((r) => r.id !== deleteTarget.id));
+      // Kalau rental yang dihapus statusnya Aktif/Pending, kembalikan status kendaraan jadi Tersedia
+      if ((deleteTarget.status === "Aktif" || deleteTarget.status === "Pending") && deleteTarget.vehicle_id) {
+        await supabase.from("vehicles").update({ status: "Tersedia" }).eq("id", deleteTarget.vehicle_id);
+        setVehicles((prev) => prev.map((v) => (v.id === deleteTarget.vehicle_id ? { ...v, status: "Tersedia" } : v)));
+      }
+    }
+    setDeleting(false);
+    setDeleteTarget(null);
+  };
+
   const pendingCount = rentals.filter(r => r.status === "Pending").length;
 
   const chips = [
@@ -235,7 +330,7 @@ export default function Penyewaan() {
                     <td style={{ padding: "13px 14px" }}><StatusBadge status={r.payment_status} /></td>
                     <td style={{ padding: "13px 14px" }}><StatusBadge status={r.status} /></td>
                     <td style={{ padding: "13px 14px" }}>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "nowrap" }}>
+                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
                         {/* ── Tombol Konfirmasi (hanya untuk Pending) ── */}
                         {r.status === "Pending" && (
                           <>
@@ -300,6 +395,42 @@ export default function Penyewaan() {
                             ✓ Selesai
                           </button>
                         )}
+
+                        {/* ── Tombol Edit & Hapus (selalu ada) ── */}
+                        <button
+                          onClick={() => openEdit(r)}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: "6px",
+                            background: "rgba(96,165,250,0.1)",
+                            border: "1px solid rgba(96,165,250,0.3)",
+                            color: "#60a5fa",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            fontFamily: "inherit",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          ✎ Edit
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(r)}
+                          style={{
+                            padding: "5px 10px",
+                            borderRadius: "6px",
+                            background: "rgba(248,113,113,0.1)",
+                            border: "1px solid rgba(248,113,113,0.3)",
+                            color: "#f87171",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: 600,
+                            fontFamily: "inherit",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          🗑 Hapus
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -414,6 +545,112 @@ export default function Penyewaan() {
                   {confirmingId ? "Mengkonfirmasi…" : "✓ Ya, Konfirmasi Booking"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal Edit Transaksi ─────────────────────────────────── */}
+      {editRental && (
+        <Modal title="Edit Transaksi Sewa" onClose={() => setEditRental(null)}>
+          <ErrAlert msg={editErr} />
+          <div style={{
+            background: "#1e293b", borderRadius: "9px", padding: "10px 14px",
+            marginBottom: "14px", fontSize: "12.5px", color: "#94a3b8",
+          }}>
+            <strong style={{ color: "#f1f5f9" }}>{editRental.customer_name}</strong> · {editRental.vehicle_name} ({editRental.plate})
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 16px" }}>
+            <Field label="Tanggal Mulai" required>
+              <Input type="date" value={editForm.start_date} onChange={e => setEditForm(p => ({ ...p, start_date: e.target.value }))} />
+            </Field>
+            <Field label="Durasi (Hari)" required>
+              <Input type="number" min="1" value={editForm.days} onChange={e => setEditForm(p => ({ ...p, days: Number(e.target.value) || 1 }))} />
+            </Field>
+          </div>
+          <Field label="Status Sewa">
+            <Select value={editForm.status} onChange={e => setEditForm(p => ({ ...p, status: e.target.value as Rental["status"] }))}>
+              <option value="Pending">Pending</option>
+              <option value="Aktif">Aktif</option>
+              <option value="Selesai">Selesai</option>
+              <option value="Dibatalkan">Dibatalkan</option>
+            </Select>
+          </Field>
+          <Field label="Status Pembayaran">
+            <Select value={editForm.payment_status} onChange={e => setEditForm(p => ({ ...p, payment_status: e.target.value as Rental["payment_status"] }))}>
+              <option value="Belum Bayar">Belum Bayar</option>
+              <option value="DP">DP</option>
+              <option value="Lunas">Lunas</option>
+            </Select>
+          </Field>
+          <Field label="Catatan">
+            <Input value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} placeholder="Keperluan sewa..." />
+          </Field>
+          {editTotalCost > 0 && (
+            <div style={{ background: "#1e293b", borderRadius: "10px", padding: "14px", marginBottom: "16px", border: "1px solid #f59e0b33" }}>
+              <p style={{ fontSize: "12px", color: "#94a3b8", marginBottom: "4px" }}>
+                {editForm.days} hari × {fmt(editRental.rate)}/hari{editEndDate && ` · s/d ${editEndDate}`}
+              </p>
+              <p style={{ fontSize: "22px", fontWeight: 800, color: "#f59e0b", fontFamily: "Syne, sans-serif" }}>{fmt(editTotalCost)}</p>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+            <Btn variant="secondary" onClick={() => setEditRental(null)}>Batal</Btn>
+            <Btn onClick={handleEditSave} icon={<Icons.save />} disabled={editSaving}>
+              {editSaving ? "Menyimpan..." : "Simpan Perubahan"}
+            </Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* ── Modal Konfirmasi Hapus ───────────────────────────────── */}
+      {deleteTarget && (
+        <div
+          onClick={() => setDeleteTarget(null)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 300,
+            background: "rgba(0,0,0,0.75)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#0f172a", borderRadius: 16, border: "1px solid #1e293b",
+              width: "100%", maxWidth: 400, padding: 24,
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", marginBottom: 8 }}>
+              Hapus Transaksi Sewa?
+            </div>
+            <p style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6, marginBottom: 20 }}>
+              Transaksi sewa <strong style={{ color: "#f1f5f9" }}>{deleteTarget.customer_name}</strong> untuk kendaraan{" "}
+              <strong style={{ color: "#f1f5f9" }}>{deleteTarget.vehicle_name}</strong> akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                style={{
+                  flex: 1, padding: 11, borderRadius: 10, border: "1px solid #1e293b",
+                  background: "transparent", color: "#94a3b8", fontSize: 13, fontWeight: 600,
+                  cursor: "pointer", fontFamily: "inherit",
+                }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                style={{
+                  flex: 1, padding: 11, borderRadius: 10, border: "none",
+                  background: "#f87171", color: "#0f0f0f", fontSize: 13, fontWeight: 700,
+                  cursor: deleting ? "not-allowed" : "pointer", fontFamily: "inherit",
+                  opacity: deleting ? 0.7 : 1,
+                }}
+              >
+                {deleting ? "Menghapus..." : "Ya, Hapus"}
+              </button>
             </div>
           </div>
         </div>

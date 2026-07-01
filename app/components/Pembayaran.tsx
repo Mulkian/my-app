@@ -38,6 +38,12 @@ export default function Pembayaran() {
   const [saving, setSaving] = useState(false);
   const [proofModal, setProofModal] = useState<Rental | null>(null);
   const [verifying, setVerifying] = useState<string | null>(null);
+  const [editPayment, setEditPayment] = useState<Payment | null>(null);
+  const [editForm, setEditForm] = useState({ amount: 0, method: "Tunai", date: "", status: "Lunas" as Payment["status"] });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editErr, setEditErr] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -99,18 +105,117 @@ export default function Pembayaran() {
           r.id === rental.id ? { ...r, payment_status: "Lunas" } : r,
         ),
       );
-      await supabase
-        .from("payments")
-        .update({ status: "Lunas" })
-        .eq("rental_id", rental.id);
-      setPayments((prev) =>
-        prev.map((p) =>
-          p.rental_id === rental.id ? { ...p, status: "Lunas" } : p,
-        ),
-      );
+
+      // Cek dulu apakah sudah ada baris payment untuk rental ini.
+      const existing = payments.find((p) => p.rental_id === rental.id);
+
+      if (existing) {
+        // Sudah ada -> tinggal update statusnya jadi Lunas
+        await supabase
+          .from("payments")
+          .update({ status: "Lunas" })
+          .eq("rental_id", rental.id);
+        setPayments((prev) =>
+          prev.map((p) =>
+            p.rental_id === rental.id ? { ...p, status: "Lunas" } : p,
+          ),
+        );
+      } else {
+        // Belum ada baris payment (mis. user bayar lewat portal) -> buat baru
+        // supaya tercatat di riwayat pembayaran admin.
+        const { data: newPayment, error: insertErr } = await supabase
+          .from("payments")
+          .insert({
+            rental_id: rental.id,
+            customer_name: rental.customer_name,
+            amount: rental.total_cost,
+            method: rental.payment_method ?? "Transfer Bank",
+            date: new Date().toISOString().split("T")[0],
+            status: "Lunas",
+          })
+          .select()
+          .single();
+
+        if (!insertErr && newPayment) {
+          setPayments((prev) => [newPayment, ...prev]);
+        }
+      }
     }
     setVerifying(null);
     setProofModal(null);
+  };
+
+  const openEdit = (p: Payment) => {
+    setEditPayment(p);
+    setEditForm({ amount: p.amount, method: p.method, date: p.date, status: p.status });
+    setEditErr("");
+  };
+
+  const handleEditSave = async () => {
+    if (!editPayment) return;
+    if (!editForm.amount || editForm.amount <= 0) {
+      setEditErr("Jumlah harus lebih dari 0.");
+      return;
+    }
+    if (!editForm.date) {
+      setEditErr("Tanggal wajib diisi.");
+      return;
+    }
+    setEditSaving(true);
+    setEditErr("");
+
+    const { data: updated, error } = await supabase
+      .from("payments")
+      .update({
+        amount: editForm.amount,
+        method: editForm.method,
+        date: editForm.date,
+        status: editForm.status,
+      })
+      .eq("id", editPayment.id)
+      .select()
+      .single();
+
+    if (error) {
+      setEditErr(error.message);
+      setEditSaving(false);
+      return;
+    }
+
+    setPayments((prev) =>
+      prev.map((p) => (p.id === editPayment.id ? { ...p, ...updated } : p)),
+    );
+
+    // Sinkronkan status pembayaran di rental terkait
+    await supabase
+      .from("rentals")
+      .update({ payment_status: editForm.status })
+      .eq("id", editPayment.rental_id);
+    setRentals((prev) =>
+      prev.map((r) =>
+        r.id === editPayment.rental_id
+          ? { ...r, payment_status: editForm.status }
+          : r,
+      ),
+    );
+
+    setEditSaving(false);
+    setEditPayment(null);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    const { error } = await supabase
+      .from("payments")
+      .delete()
+      .eq("id", deleteTarget.id);
+
+    if (!error) {
+      setPayments((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+    }
+    setDeleting(false);
+    setDeleteTarget(null);
   };
 
   const handleSave = async () => {
@@ -161,24 +266,6 @@ export default function Pembayaran() {
     setForm(BLANK);
     setSaving(false);
     setShow(false);
-  };
-
-  const handleLunas = async (p: Payment) => {
-    await Promise.all([
-      supabase.from("payments").update({ status: "Lunas" }).eq("id", p.id),
-      supabase
-        .from("rentals")
-        .update({ payment_status: "Lunas" })
-        .eq("id", p.rental_id),
-    ]);
-    setPayments((prev) =>
-      prev.map((x) => (x.id === p.id ? { ...x, status: "Lunas" } : x)),
-    );
-    setRentals((prev) =>
-      prev.map((r) =>
-        r.id === p.rental_id ? { ...r, payment_status: "Lunas" } : r,
-      ),
-    );
   };
 
   const summaryStats = [
@@ -590,24 +677,40 @@ export default function Pembayaran() {
                         )}
                       </td>
                       <td style={{ padding: "13px 16px" }}>
-                        {p.status !== "Lunas" && (
+                        <div style={{ display: "flex", gap: 6 }}>
                           <button
-                            onClick={() => handleLunas(p)}
+                            onClick={() => openEdit(p)}
                             style={{
                               padding: "5px 12px",
                               borderRadius: "6px",
-                              background: "#14532d33",
-                              border: "1px solid #4ade8033",
-                              color: "#4ade80",
+                              background: "rgba(96,165,250,0.1)",
+                              border: "1px solid rgba(96,165,250,0.3)",
+                              color: "#60a5fa",
                               cursor: "pointer",
                               fontSize: "12px",
                               fontWeight: 600,
                               fontFamily: "inherit",
                             }}
                           >
-                            ✓ Konfirmasi Lunas
+                            ✎ Edit
                           </button>
-                        )}
+                          <button
+                            onClick={() => setDeleteTarget(p)}
+                            style={{
+                              padding: "5px 12px",
+                              borderRadius: "6px",
+                              background: "rgba(248,113,113,0.1)",
+                              border: "1px solid rgba(248,113,113,0.3)",
+                              color: "#f87171",
+                              cursor: "pointer",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              fontFamily: "inherit",
+                            }}
+                          >
+                            🗑 Hapus
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -804,6 +907,157 @@ export default function Pembayaran() {
                     : "✓ Konfirmasi Lunas"}
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Edit Pembayaran */}
+      {editPayment && (
+        <Modal title="Edit Pembayaran" onClose={() => setEditPayment(null)}>
+          <ErrAlert msg={editErr} />
+          <div
+            style={{
+              background: "#1e293b",
+              borderRadius: "9px",
+              padding: "10px 14px",
+              marginBottom: "14px",
+              fontSize: "12.5px",
+              color: "#94a3b8",
+            }}
+          >
+            Pelanggan: <strong style={{ color: "#f1f5f9" }}>{editPayment.customer_name}</strong>
+          </div>
+          <Field label="Jumlah Dibayar (Rp)" required>
+            <Input
+              type="number"
+              value={editForm.amount || ""}
+              onChange={(e) =>
+                setEditForm((p) => ({ ...p, amount: Number(e.target.value) }))
+              }
+              placeholder="1000000"
+            />
+          </Field>
+          <Field label="Metode Pembayaran">
+            <Select
+              value={editForm.method}
+              onChange={(e) =>
+                setEditForm((p) => ({ ...p, method: e.target.value }))
+              }
+            >
+              <option>Tunai</option>
+              <option>Transfer Bank</option>
+              <option>QRIS</option>
+              <option>Kartu Debit</option>
+            </Select>
+          </Field>
+          <Field label="Tanggal Pembayaran" required>
+            <Input
+              type="date"
+              value={editForm.date}
+              onChange={(e) =>
+                setEditForm((p) => ({ ...p, date: e.target.value }))
+              }
+            />
+          </Field>
+          <Field label="Status">
+            <Select
+              value={editForm.status}
+              onChange={(e) =>
+                setEditForm((p) => ({
+                  ...p,
+                  status: e.target.value as Payment["status"],
+                }))
+              }
+            >
+              <option value="Lunas">Lunas</option>
+              <option value="DP">DP</option>
+              <option value="Belum Bayar">Belum Bayar</option>
+            </Select>
+          </Field>
+          <div
+            style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}
+          >
+            <Btn variant="secondary" onClick={() => setEditPayment(null)}>
+              Batal
+            </Btn>
+            <Btn onClick={handleEditSave} icon={<Icons.save />} disabled={editSaving}>
+              {editSaving ? "Menyimpan..." : "Simpan Perubahan"}
+            </Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal Konfirmasi Hapus */}
+      {deleteTarget && (
+        <div
+          onClick={() => setDeleteTarget(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 50,
+            background: "rgba(0,0,0,0.75)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#0f172a",
+              borderRadius: 16,
+              border: "1px solid #1e293b",
+              width: "100%",
+              maxWidth: 400,
+              padding: 24,
+            }}
+          >
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", marginBottom: 8 }}>
+              Hapus Pembayaran?
+            </div>
+            <p style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.6, marginBottom: 20 }}>
+              Catatan pembayaran <strong style={{ color: "#f1f5f9" }}>{deleteTarget.customer_name}</strong> sebesar{" "}
+              <strong style={{ color: "#fbbf24" }}>{fmt(deleteTarget.amount)}</strong> akan dihapus permanen. Tindakan ini tidak bisa dibatalkan.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                style={{
+                  flex: 1,
+                  padding: 11,
+                  borderRadius: 10,
+                  border: "1px solid #1e293b",
+                  background: "transparent",
+                  color: "#94a3b8",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleting}
+                style={{
+                  flex: 1,
+                  padding: 11,
+                  borderRadius: 10,
+                  border: "none",
+                  background: "#f87171",
+                  color: "#0f0f0f",
+                  fontSize: 13,
+                  fontWeight: 700,
+                  cursor: deleting ? "not-allowed" : "pointer",
+                  fontFamily: "inherit",
+                  opacity: deleting ? 0.7 : 1,
+                }}
+              >
+                {deleting ? "Menghapus..." : "Ya, Hapus"}
+              </button>
             </div>
           </div>
         </div>
