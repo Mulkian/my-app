@@ -105,6 +105,41 @@ export default function BookingPage({
     return null;
   };
 
+  // ── Validate vehicle step ───────────────────────────────────
+  const validateVehicle = () => {
+    if (!selectedVehicle) return "Pilih kendaraan dulu.";
+    return null;
+  };
+
+  // ── Cek apakah boleh pindah ke step tertentu ────────────────
+  const canGoToStep = (target: number) => {
+    if (target === 1) return true;
+    if (target === 2) return !validateIdentity();
+    if (target === 3) return !validateIdentity() && !validateVehicle();
+    return false; // step 4 hanya via submit sukses, tidak lewat klik manual
+  };
+
+  // ── Handle klik tab step ─────────────────────────────────────
+  const handleStepClick = (target: 1 | 2 | 3 | 4) => {
+    if (target === bookStep) return;
+
+    // Mundur ke step sebelumnya selalu boleh
+    if (target < bookStep) {
+      setBookError("");
+      setBookStep(target);
+      return;
+    }
+
+    // Maju ke step berikutnya harus lolos validasi dulu
+    if (canGoToStep(target)) {
+      setBookError("");
+      setBookStep(target);
+    } else {
+      const err = target === 2 ? validateIdentity() : validateVehicle();
+      setBookError(err || "Lengkapi step sebelumnya terlebih dahulu.");
+    }
+  };
+
   // ── Handle final booking ───────────────────────────────────
   const handleBook = async () => {
     if (!selectedVehicle || !bookForm.start || !bookForm.end || bookForm.end <= bookForm.start) {
@@ -209,7 +244,7 @@ setBookLoading(false);
   return (
     <div>
       <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
-      <StepIndicator current={4} />
+      <StepIndicator current={4} onStepClick={handleStepClick} />
       <div style={{ background: CARD_BG, borderRadius: 16, border: `0.5px solid ${CARD_BORDER}`, padding: "48px 32px", textAlign: "center" }}>
 
         {/* Icon animasi menunggu */}
@@ -268,7 +303,7 @@ setBookLoading(false);
   return (
     <div>
       <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
-      <StepIndicator current={bookStep} />
+      <StepIndicator current={bookStep} onStepClick={handleStepClick} />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 18 }}>
 
@@ -535,7 +570,8 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-function StepIndicator({ current }: { current: number }) {
+// ─── StepIndicator (clickable) ─────────────────────────────────
+function StepIndicator({ current, onStepClick }: { current: number; onStepClick?: (n: 1 | 2 | 3 | 4) => void }) {
   const steps = [
     { n: 1, l: "Data Diri" },
     { n: 2, l: "Pilih Kendaraan" },
@@ -544,13 +580,31 @@ function StepIndicator({ current }: { current: number }) {
   ];
   return (
     <div style={{ display: "flex", gap: 0, marginBottom: 24, background: CARD_BG, borderRadius: 12, border: `0.5px solid ${CARD_BORDER}`, overflow: "hidden" }}>
-      {steps.map((s, i) => (
-        <div key={s.n} style={{ flex: 1, padding: "12px 10px", textAlign: "center", background: current === s.n ? ACCENT : current > s.n ? "rgba(245,158,11,0.1)" : CARD_BG, borderRight: i < 3 ? `0.5px solid ${CARD_BORDER}` : "none" }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: current === s.n ? "#fff" : current > s.n ? ACCENT : TEXT_MUTED }}>
-            {current > s.n ? "✓ " : `${s.n}. `}{s.l}
+      {steps.map((s, i) => {
+        // Step 4 ("Selesai") tidak boleh diklik manual — hanya dicapai lewat submit booking sukses.
+        // Step yang sedang aktif juga tidak perlu diklik.
+        const clickable = s.n !== 4 && s.n !== current;
+        return (
+          <div
+            key={s.n}
+            onClick={() => clickable && onStepClick?.(s.n as 1 | 2 | 3 | 4)}
+            style={{
+              flex: 1,
+              padding: "12px 10px",
+              textAlign: "center",
+              background: current === s.n ? ACCENT : current > s.n ? "rgba(245,158,11,0.1)" : CARD_BG,
+              borderRight: i < 3 ? `0.5px solid ${CARD_BORDER}` : "none",
+              cursor: clickable ? "pointer" : "default",
+              transition: "background 0.15s",
+              userSelect: "none",
+            }}
+          >
+            <div style={{ fontSize: 12, fontWeight: 700, color: current === s.n ? "#fff" : current > s.n ? ACCENT : TEXT_MUTED }}>
+              {current > s.n ? "✓ " : `${s.n}. `}{s.l}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

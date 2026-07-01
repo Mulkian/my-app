@@ -121,26 +121,41 @@ export default function PortalPage() {
   }, [router]);
 
   // ── Realtime ──────────────────────────────────────────────────
-  useEffect(() => {
-    const channel = supabase
-      .channel("portal-rentals-realtime")
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "rentals" }, (payload) => {
-        console.log("🔔 REALTIME EVENT MASUK:", payload);
+ // ── Realtime ──────────────────────────────────────────────────
+useEffect(() => {
+  if (!user) return;
+
+  const channel = supabase
+    .channel("portal-realtime")
+    // Update status rental di UI (riwayat, pembayaran, dsb)
+    .on(
+      "postgres_changes",
+      { event: "UPDATE", schema: "public", table: "rentals", filter: `customer_id=eq.${user.id}` },
+      (payload) => {
+        console.log("🔔 RENTAL UPDATE:", payload);
         setRentals((prev) =>
-          prev.map((r) => r.id === payload.new.id ? { ...r, ...(payload.new as Rental) } : r),
+          prev.map((r) => (r.id === payload.new.id ? { ...r, ...(payload.new as Rental) } : r)),
         );
-        if (payload.old?.status === "Pending" && payload.new?.status === "Aktif") {
-          pushNotif("success", "Booking Dikonfirmasi! 🎉", `Booking ${payload.new.vehicle_name} Anda dikonfirmasi admin. Status: Aktif.`);
-        }
-        if (payload.old?.status === "Pending" && payload.new?.status === "Dibatalkan") {
-          pushNotif("error", "Booking Ditolak", `Maaf, booking ${payload.new.vehicle_name} Anda ditolak admin.`);
-        }
-      })
-      .subscribe((status) => {
-        console.log("📡 STATUS CHANNEL rentals:", status);
-      });
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+      },
+    )
+    // Notifikasi baru dari DB trigger (bukan dari client lagi)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+      (payload) => {
+        console.log("🔔 NOTIF BARU:", payload);
+        setNotifs((prev) => [
+          { ...(payload.new as Notification), time: "Baru saja" },
+          ...prev,
+        ]);
+      },
+    )
+    .subscribe((status) => {
+      console.log("📡 STATUS CHANNEL portal-realtime:", status);
+    });
+
+  return () => { supabase.removeChannel(channel); };
+}, [user]);
 
   // ── Helpers ───────────────────────────────────────────────────
   const pushNotif = async (type: Notification["type"], title: string, message: string) => {
