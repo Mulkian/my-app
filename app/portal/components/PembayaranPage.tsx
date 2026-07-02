@@ -1,6 +1,6 @@
 "use client";
 import { QRCodeSVG } from "qrcode.react";
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Rental, Vehicle } from "types/types";
 import {
@@ -25,7 +25,6 @@ const PAY_METHODS = [
   { id: "Bank Aceh",  icon: "CreditCard", desc: "Transfer ke rekening Bank Aceh Syariah" },
 ] as const;
 
-// Nomor rekening dummy — ganti dengan data asli sebelum production
 const BANK_ACCOUNTS: Record<string, { bankName: string; number: string; holder: string }> = {
   BSI:         { bankName: "Bank Syariah Indonesia (BSI)", number: "7123456789",    holder: "PT Rental Mobil Aceh" },
   BCA:         { bankName: "Bank Central Asia (BCA)",      number: "1234567890",    holder: "PT Rental Mobil Aceh" },
@@ -35,7 +34,6 @@ const BANK_ACCOUNTS: Record<string, { bankName: string; number: string; holder: 
 const PROOF_BUCKET = "payment-proofs";
 const MAX_PROOF_SIZE_MB = 5;
 
-// ─── Order Detail Modal ────────────────────────────────────────
 function OrderDetailModal({ rental, vehicle, onClose }: {
   rental: Rental;
   vehicle: Vehicle | { name: string; photo_url?: string };
@@ -155,7 +153,6 @@ function InfoRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Receipt Modal ─────────────────────────────────────────────
 function ReceiptModal({ rental, vehicle, onClose }: {
   rental: Rental;
   vehicle: Vehicle | { name: string; photo_url?: string };
@@ -300,7 +297,6 @@ function ReceiptModal({ rental, vehicle, onClose }: {
   );
 }
 
-// ─── Small helpers ─────────────────────────────────────────────
 const Dash = () => <div style={{ borderTop:"1.5px dashed rgba(255,255,255,0.1)", margin:"12px 0" }} />;
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -321,7 +317,6 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-// ─── Info Rekening Transfer Bank ───────────────────────────────
 function BankTransferInfo({ bankId }: { bankId: string }) {
   const [copied, setCopied] = useState(false);
   const acc = BANK_ACCOUNTS[bankId];
@@ -366,7 +361,6 @@ function BankTransferInfo({ bankId }: { bankId: string }) {
   );
 }
 
-// ─── Upload Bukti Bayar ────────────────────────────────────────
 function ProofUpload({
   file, preview, error, onSelect, onRemove,
 }: {
@@ -432,6 +426,13 @@ function ProofUpload({
 }
 
 // ─── Main Page ─────────────────────────────────────────────────
+// Catatan: sinkronisasi realtime tabel `rentals` sekarang HANYA ditangani di
+// level parent (app/portal/page.tsx, channel "portal-realtime"). Sebelumnya
+// halaman ini juga punya channel sendiri ("rentals-sync-customer-pembayaran")
+// yang berjalan bersamaan dan bisa saling tabrakan/race dengan channel parent.
+// Sekarang cukup andalkan prop `rentals` yang selalu di-refresh dari parent;
+// kalau ada rental yang sedang dibuka di form bayar / modal detail, kita
+// sinkronkan dari prop tsb lewat useEffect di bawah.
 export default function PembayaranPage({ rentals, vehicles, preselectedRental, onPaymentComplete, onNotify }: Props) {
   const [selectedRental, setSelectedRental] = useState<Rental | null>(preselectedRental ?? null);
   const [payMethod, setPayMethod]           = useState("QRIS");
@@ -443,10 +444,26 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
   const [proofPreview, setProofPreview] = useState<string | null>(null);
   const [proofError,   setProofError]   = useState<string | null>(null);
 
-  // ── Segmentasi rental ──────────────────────────────────────
-  // Rental belum bayar yang SUDAH dikonfirmasi admin (status Aktif) → bisa bayar
+  // Begitu prop `rentals` berubah (misalnya karena realtime update dari admin
+  // yang ditangani di parent), sinkronkan juga rental yang sedang terbuka di
+  // form bayar / modal detail supaya UI ikut ter-update tanpa reload manual.
+  useEffect(() => {
+    if (selectedRental) {
+      const fresh = rentals.find((r) => r.id === selectedRental.id);
+      if (fresh && JSON.stringify(fresh) !== JSON.stringify(selectedRental)) {
+        setSelectedRental(fresh);
+      }
+    }
+    if (detailRental) {
+      const fresh = rentals.find((r) => r.id === detailRental.id);
+      if (fresh && JSON.stringify(fresh) !== JSON.stringify(detailRental)) {
+        setDetailRental(fresh);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rentals]);
+
   const unpaidActive  = rentals.filter((r) => r.payment_status === "Belum Bayar" && r.status === "Aktif");
-  // Rental belum bayar yang MASIH pending → belum bisa bayar
   const unpaidPending = rentals.filter((r) => r.payment_status === "Belum Bayar" && r.status === "Pending");
   const pending       = rentals.filter((r) => r.payment_status === "Menunggu Verifikasi");
   const paid          = rentals.filter((r) => r.payment_status === "Lunas");
@@ -580,7 +597,6 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
         <p style={{ fontSize:13, color:TEXT_MUTED }}>Kelola tagihan dan riwayat pembayaran</p>
       </div>
 
-      {/* ── Form Bayar (muncul kalau ada rental dipilih) ─────────── */}
       {selectedRental && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 320px", gap:18, marginBottom:22 }}>
           <div style={{ background:CARD_BG, borderRadius:14, border:`0.5px solid ${CARD_BORDER}`, padding:22 }}>
@@ -640,7 +656,6 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
         </div>
       )}
 
-      {/* ── Tagihan Siap Dibayar (status Aktif) ──────────────────── */}
       {unpaidActive.length > 0 && (
         <section style={{ marginBottom:22 }}>
           <h2 style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY, marginBottom:12 }}>Tagihan Siap Dibayar</h2>
@@ -663,7 +678,6 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
         </section>
       )}
 
-      {/* ── Menunggu Konfirmasi Admin (status Pending) ────────────── */}
       {unpaidPending.length > 0 && (
         <section style={{ marginBottom:22 }}>
           <h2 style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY, marginBottom:12 }}>Menunggu Konfirmasi Admin</h2>
@@ -692,7 +706,6 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
         </section>
       )}
 
-      {/* ── Menunggu Verifikasi Bukti Bayar ──────────────────────── */}
       {pending.length > 0 && (
         <section style={{ marginBottom:22 }}>
           <h2 style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY, marginBottom:12 }}>Menunggu Verifikasi Bukti Bayar</h2>
@@ -715,7 +728,6 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
         </section>
       )}
 
-      {/* ── Riwayat Pembayaran Lunas ──────────────────────────────── */}
       <div style={{ background:CARD_BG, borderRadius:14, border:`0.5px solid ${CARD_BORDER}`, overflow:"hidden" }}>
         <div style={{ padding:"14px 18px", borderBottom:`0.5px solid ${CARD_BORDER}` }}>
           <h2 style={{ fontSize:14, fontWeight:700, color:TEXT_PRIMARY }}>Riwayat Pembayaran</h2>
@@ -762,7 +774,6 @@ export default function PembayaranPage({ rentals, vehicles, preselectedRental, o
   );
 }
 
-// ─── Bill Summary ──────────────────────────────────────────────
 function BillSummary({ rental, vehicle }: { rental: Rental; vehicle: any }) {
   return (
     <div style={{ background:CARD_BG, borderRadius:14, border:`0.5px solid ${CARD_BORDER}`, overflow:"hidden", height:"fit-content" }}>

@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import type { Vehicle, Rental, BookForm, ProfilState } from "types/types";
 import {
@@ -43,14 +43,40 @@ export default function BookingPage({
   onBookSuccess,
   onNavigate,
 }: Props) {
-  const [bookStep, setBookStep] = useState<1 | 2 | 3 | 4>(1);
-  const [bookForm, setBookForm] = useState<BookForm>({ start: "", end: "", notes: "", withDriver: false, pickup: "" });
+  const storageKey = `booking-progress:${user?.id ?? "guest"}`;
+
+  type SavedProgress = {
+    bookStep: 1 | 2 | 3 | 4 | 5;
+    bookSuccess: boolean;
+    lastRental: Rental | null;
+    bookForm: BookForm;
+    identity: Omit<IdentityForm, "ktpFile" | "simFile" | "ktpPreview" | "simPreview">;
+    selectedVehicleId: string | null;
+  };
+
+  const loadSavedProgress = (): SavedProgress | null => {
+    if (typeof window === "undefined") return null;
+    try {
+      const raw = window.localStorage.getItem(storageKey);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  };
+
+  const saved = loadSavedProgress();
+
+  const [bookStep, setBookStep] = useState<1 | 2 | 3 | 4 | 5>(saved?.bookStep ?? 1);
+  const [bookForm, setBookForm] = useState<BookForm>(
+    saved?.bookForm ?? { start: "", end: "", notes: "", withDriver: false, pickup: "" }
+  );
   const [identityForm, setIdentityForm] = useState<IdentityForm>({
-    fullName: profil.name || user?.user_metadata?.full_name || "",
-    nik: "",
-    phone: profil.phone || "",
-    address: "",
-    simNumber: "",
+    fullName: saved?.identity?.fullName ?? profil.name ?? user?.user_metadata?.full_name ?? "",
+    nik: saved?.identity?.nik ?? "",
+    phone: saved?.identity?.phone ?? profil.phone ?? "",
+    address: saved?.identity?.address ?? "",
+    simNumber: saved?.identity?.simNumber ?? "",
     ktpFile: null,
     simFile: null,
     ktpPreview: "",
@@ -58,21 +84,75 @@ export default function BookingPage({
   });
   const [bookLoading, setBookLoading] = useState(false);
   const [bookError, setBookError] = useState("");
-  const [bookSuccess, setBookSuccess] = useState(false);
+  const [bookSuccess, setBookSuccess] = useState(saved?.bookSuccess ?? false);
+  const [lastRental, setLastRental] = useState<Rental | null>(saved?.lastRental ?? null);
+  const [lockedNotice, setLockedNotice] = useState(false);
 
   const ktpRef = useRef<HTMLInputElement>(null);
   const simRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!saved?.selectedVehicleId || selectedVehicle) return;
+    const found = vehicles.find((v) => v.id === saved.selectedVehicleId);
+    if (found) setSelectedVehicle(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicles]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const { ktpFile, simFile, ktpPreview, simPreview, ...identity } = identityForm;
+    const payload: SavedProgress = {
+      bookStep,
+      bookSuccess,
+      lastRental,
+      bookForm,
+      identity,
+      selectedVehicleId: selectedVehicle?.id ?? null,
+    };
+    window.localStorage.setItem(storageKey, JSON.stringify(payload));
+  }, [bookStep, bookSuccess, lastRental, bookForm, identityForm, selectedVehicle, storageKey]);
+
+  useEffect(() => {
+    if (!bookSuccess || bookStep !== 4 || !lastRental?.id) return;
+
+    const refetch = async () => {
+      const { data } = await supabase.from("rentals").select("*").eq("id", lastRental.id).single();
+      if (data) setLastRental((prev) => (prev ? { ...prev, ...data } : data));
+    };
+    refetch();
+
+    const channel = supabase
+      .channel(`rental-status-${lastRental.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "rentals", filter: `id=eq.${lastRental.id}` },
+        (payload) => {
+          setLastRental((prev) => (prev ? { ...prev, ...(payload.new as Rental) } : (payload.new as Rental)));
+        }
+      )
+      .subscribe();
+
+    const pollInterval = window.setInterval(refetch, 15000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      window.clearInterval(pollInterval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookSuccess, bookStep, lastRental?.id]);
 
   const resetBooking = () => {
     setSelectedVehicle(null);
     setBookForm({ start: "", end: "", notes: "", withDriver: false, pickup: "" });
     setIdentityForm({ fullName: "", nik: "", phone: "", address: "", simNumber: "", ktpFile: null, simFile: null, ktpPreview: "", simPreview: "" });
     setBookSuccess(false);
+    setLastRental(null);
     setBookStep(1);
     setBookError("");
+    setLockedNotice(false);
+    if (typeof window !== "undefined") window.localStorage.removeItem(storageKey);
   };
 
-  // ── Upload helper ──────────────────────────────────────────
   const uploadDoc = async (file: File, docType: "ktp" | "sim"): Promise<string | null> => {
     const ext = file.name.split(".").pop();
     const path = `documents/${user.id}/${docType}_${Date.now()}.${ext}`;
@@ -82,7 +162,6 @@ export default function BookingPage({
     return data.publicUrl;
   };
 
-  // ── Handle file pick ───────────────────────────────────────
   const handleFilePick = (type: "ktp" | "sim", file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -93,7 +172,6 @@ export default function BookingPage({
     reader.readAsDataURL(file);
   };
 
-  // ── Validate identity step ─────────────────────────────────
   const validateIdentity = () => {
     if (!identityForm.fullName.trim()) return "Nama lengkap wajib diisi.";
     if (!identityForm.nik.trim() || identityForm.nik.length !== 16) return "NIK harus 16 digit.";
@@ -105,32 +183,39 @@ export default function BookingPage({
     return null;
   };
 
-  // ── Validate vehicle step ───────────────────────────────────
   const validateVehicle = () => {
     if (!selectedVehicle) return "Pilih kendaraan dulu.";
     return null;
   };
 
-  // ── Cek apakah boleh pindah ke step tertentu ────────────────
   const canGoToStep = (target: number) => {
     if (target === 1) return true;
     if (target === 2) return !validateIdentity();
     if (target === 3) return !validateIdentity() && !validateVehicle();
-    return false; // step 4 hanya via submit sukses, tidak lewat klik manual
+    return false;
   };
 
-  // ── Handle klik tab step ─────────────────────────────────────
-  const handleStepClick = (target: 1 | 2 | 3 | 4) => {
+  // Booking sudah tersimpan di DB (step 4/5) → step 1-3 dikunci permanen
+  // untuk conversation ini, supaya user tidak bisa submit dobel dengan
+  // data yang sama.
+  const isLockedFromEditing = bookSuccess;
+
+  const handleStepClick = (target: 1 | 2 | 3 | 4 | 5) => {
     if (target === bookStep) return;
 
-    // Mundur ke step sebelumnya selalu boleh
+    // Booking sudah dikonfirmasi terkirim → tidak boleh balik ke step 1-3.
+    if (isLockedFromEditing && target < 4) {
+      setLockedNotice(true);
+      window.setTimeout(() => setLockedNotice(false), 3500);
+      return;
+    }
+
     if (target < bookStep) {
       setBookError("");
       setBookStep(target);
       return;
     }
 
-    // Maju ke step berikutnya harus lolos validasi dulu
     if (canGoToStep(target)) {
       setBookError("");
       setBookStep(target);
@@ -140,7 +225,6 @@ export default function BookingPage({
     }
   };
 
-  // ── Handle final booking ───────────────────────────────────
   const handleBook = async () => {
     if (!selectedVehicle || !bookForm.start || !bookForm.end || bookForm.end <= bookForm.start) {
       setBookError("Lengkapi semua field booking.");
@@ -149,7 +233,6 @@ export default function BookingPage({
     setBookLoading(true);
     setBookError("");
 
-    // Upload docs
     let ktpUrl = "", simUrl = "";
     if (identityForm.ktpFile) {
       const url = await uploadDoc(identityForm.ktpFile, "ktp");
@@ -165,7 +248,6 @@ export default function BookingPage({
     const days = diffDays(bookForm.start, bookForm.end);
     const total = days * selectedVehicle.rate + (bookForm.withDriver ? days * 150000 : 0);
 
-    // Upsert customer
     const { data: ex } = await supabase.from("customers").select("id").eq("id", user.id).single();
     if (!ex) {
       await supabase.from("customers").insert({
@@ -211,115 +293,227 @@ export default function BookingPage({
 
     if (error) {
       setBookError("Gagal: " + error.message);
-   } else {
-  // update total_rent customer
-  const { data: currentCustomer } = await supabase
-    .from("customers")
-    .select("total_rent")
-    .eq("id", user.id)
-    .single();
+    } else {
+      const { data: currentCustomer } = await supabase
+        .from("customers")
+        .select("total_rent")
+        .eq("id", user.id)
+        .single();
 
-  await supabase
-    .from("customers")
-    .update({ total_rent: (currentCustomer?.total_rent ?? 0) + 1 })
-    .eq("id", user.id);
+      await supabase
+        .from("customers")
+        .update({ total_rent: (currentCustomer?.total_rent ?? 0) + 1 })
+        .eq("id", user.id);
 
-  // ambil rental milik user ini saja
-  const { data: r } = await supabase
-    .from("rentals")
-    .select("*")
-    .eq("customer_id", user.id)
-    .order("created_at", { ascending: false });
+      const { data: r } = await supabase
+        .from("rentals")
+        .select("*")
+        .eq("customer_id", user.id)
+        .order("created_at", { ascending: false });
 
-  if (r?.[0]) onBookSuccess(r[0]);
-  setBookSuccess(true);
-  setBookStep(4);
-}
-setBookLoading(false);
+      if (r?.[0]) {
+        onBookSuccess(r[0]);
+        setLastRental(r[0]);
+      }
+      setBookSuccess(true);
+      setBookStep(4);
+    }
     setBookLoading(false);
   };
 
-  // ── Success screen ────────────────────────────────────────
+  // ── STEP 4: Cek Booking ──
   if (bookStep === 4 && bookSuccess) {
-  return (
-    <div>
-      <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
-      <StepIndicator current={4} onStepClick={handleStepClick} />
-      <div style={{ background: CARD_BG, borderRadius: 16, border: `0.5px solid ${CARD_BORDER}`, padding: "48px 32px", textAlign: "center" }}>
+    const status = lastRental?.status ?? "Pending";
+    const isAktif = status === "Aktif" || status === "Selesai";
+    const isDitolak = status === "Dibatalkan";
+    const isLunas = lastRental?.payment_status === "Lunas";
 
-        {/* Icon animasi menunggu */}
-        <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(245,158,11,0.12)", border: "2px solid rgba(245,158,11,0.4)", color: "#fbbf24", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 36 }}>
-          ⏳
-        </div>
+    return (
+      <div>
+        <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
+        <StepIndicator current={4} onStepClick={handleStepClick} locked={isLockedFromEditing} />
+        <div style={{ background: CARD_BG, borderRadius: 16, border: `0.5px solid ${CARD_BORDER}`, padding: "48px 32px", textAlign: "center" }}>
 
-        <h2 style={{ fontSize: 22, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 8 }}>
-          Booking Berhasil Dikirim!
-        </h2>
-        <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 28 }}>
-          Dokumen identitas Anda telah tersimpan. Tunggu konfirmasi dari admin.
-        </p>
+          {/* Notice: data terkunci, tidak bisa edit lagi */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, justifyContent: "center",
+            background: "rgba(59,130,246,0.08)", border: "0.5px solid rgba(59,130,246,0.25)",
+            borderRadius: 10, padding: "10px 16px", marginBottom: 24, fontSize: 12, color: "#93c5fd",
+          }}>
+            <span>🔒</span>
+            <span>Booking ini sudah dikirim dan tidak bisa diubah lagi, untuk menghindari booking ganda. Ingin booking kendaraan lain? Klik <strong>Booking Lagi</strong>.</span>
+          </div>
 
-        {/* Progress tracker */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 auto 28px", maxWidth: 420 }}>
-          <TrackerStep icon="✓"  label="Booking Dibuat"    active done />
-          <div style={{ flex: 1, height: 2, background: "rgba(245,158,11,0.4)", position: "relative", top: -14 }} />
-          <TrackerStep icon="⏳" label="Konfirmasi Admin"  active pulse />
-          <div style={{ flex: 1, height: 2, background: "rgba(255,255,255,0.06)", position: "relative", top: -14 }} />
-          <TrackerStep icon="💳" label="Pembayaran" />
-          <div style={{ flex: 1, height: 2, background: "rgba(255,255,255,0.06)", position: "relative", top: -14 }} />
-          <TrackerStep icon="🚗" label="Sewa Aktif" />
-        </div>
+          {lockedNotice && (
+            <div style={{
+              position: "fixed", top: 20, left: "50%", transform: "translateX(-50%)", zIndex: 999,
+              background: "#1a2540", border: "1px solid rgba(245,158,11,0.4)", color: "#fbbf24",
+              borderRadius: 10, padding: "10px 18px", fontSize: 13, fontWeight: 600,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
+            }}>
+              🔒 Data booking sudah terkirim, tidak bisa diedit lagi.
+            </div>
+          )}
 
-        {/* Status info box */}
-        <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 12, padding: "18px 22px", marginBottom: 28, textAlign: "left", lineHeight: 1.7 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24", marginBottom: 8 }}>⏳ Status: Menunggu Konfirmasi Admin</p>
-          <p style={{ fontSize: 13, color: "#fbbf24", opacity: 0.85 }}>
-            Admin akan memverifikasi booking dan dokumen Anda dalam maks. <strong>1×24 jam</strong>.
+          <div style={{
+            width: 80, height: 80, borderRadius: "50%",
+            background: isDitolak ? "rgba(239,68,68,0.12)" : isAktif ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)",
+            border: `2px solid ${isDitolak ? "rgba(239,68,68,0.4)" : isAktif ? "rgba(34,197,94,0.4)" : "rgba(245,158,11,0.4)"}`,
+            color: isDitolak ? "#f87171" : isAktif ? "#4ade80" : "#fbbf24",
+            display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 36,
+          }}>
+            {isDitolak ? "✕" : isAktif ? "✓" : "⏳"}
+          </div>
+
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 8 }}>
+            {isDitolak ? "Booking Ditolak" : isAktif ? "Booking Dikonfirmasi!" : "Booking Berhasil Dikirim!"}
+          </h2>
+          <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 28 }}>
+            {isDitolak
+              ? "Booking Anda tidak dapat diproses. Silakan coba booking ulang dengan kendaraan lain."
+              : isAktif
+              ? (isLunas ? "Sewa Anda telah aktif dan pembayaran sudah lunas." : "Sewa Anda telah aktif. Silakan lanjutkan pembayaran.")
+              : "Dokumen identitas Anda telah tersimpan. Tunggu konfirmasi dari admin."}
           </p>
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(245,158,11,0.2)" }}>
-            <p style={{ fontSize: 12, color: TEXT_MUTED, marginBottom: 4 }}>Setelah dikonfirmasi, Anda akan bisa:</p>
-            <p style={{ fontSize: 12, color: "#94a3b8" }}>✓ Melanjutkan pembayaran</p>
-            <p style={{ fontSize: 12, color: "#94a3b8" }}>✓ Melihat detail kendaraan yang disewa</p>
+
+          {/* Progress tracker */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, margin: "0 auto 28px", maxWidth: 420 }}>
+            <TrackerStep icon="✓" label="Booking Dibuat" active done />
+            <div style={{ flex: 1, height: 2, background: "rgba(245,158,11,0.4)", position: "relative", top: -14 }} />
+            <TrackerStep
+              icon={isDitolak ? "✕" : "✓"}
+              label={isDitolak ? "Ditolak" : "Konfirmasi Admin"}
+              active={!isAktif}
+              done={isAktif}
+              pulse={!isAktif && !isDitolak}
+            />
+            <div style={{ flex: 1, height: 2, background: isAktif ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.06)", position: "relative", top: -14 }} />
+            <TrackerStep
+              icon={isLunas ? "✓" : "💳"}
+              label="Pembayaran"
+              active={isAktif && !isLunas}
+              done={isLunas}
+              pulse={isAktif && !isLunas}
+            />
+            <div style={{ flex: 1, height: 2, background: isLunas ? "rgba(34,197,94,0.4)" : "rgba(255,255,255,0.06)", position: "relative", top: -14 }} />
+            <TrackerStep icon="🚗" label="Sewa Aktif" active={isLunas} done={isLunas} />
+          </div>
+
+          {/* Status info box */}
+          {isDitolak ? (
+            <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 12, padding: "18px 22px", marginBottom: 20, textAlign: "left", lineHeight: 1.7 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#f87171", marginBottom: 8 }}>✕ Status: Dibatalkan</p>
+              <p style={{ fontSize: 13, color: "#f87171", opacity: 0.85 }}>
+                Booking ini ditolak oleh admin. Anda bisa membuat booking baru dengan kendaraan lain.
+              </p>
+            </div>
+          ) : isLunas ? (
+            <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 12, padding: "18px 22px", marginBottom: 20, textAlign: "left", lineHeight: 1.7 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#4ade80", marginBottom: 8 }}>✓ Pembayaran Lunas</p>
+              <p style={{ fontSize: 13, color: "#4ade80", opacity: 0.9 }}>
+                Pembayaran Anda sudah dikonfirmasi oleh admin. Sewa Anda aktif, selamat menikmati perjalanan!
+              </p>
+            </div>
+          ) : isAktif ? (
+            <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.25)", borderRadius: 12, padding: "18px 22px", marginBottom: 20, textAlign: "left", lineHeight: 1.7 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#4ade80", marginBottom: 8 }}>✓ Booking Dikonfirmasi!</p>
+              <p style={{ fontSize: 13, color: "#4ade80", opacity: 0.9 }}>
+                Sewa Anda telah aktif. Silakan lanjutkan pembayaran.
+              </p>
+            </div>
+          ) : (
+            <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", borderRadius: 12, padding: "18px 22px", marginBottom: 20, textAlign: "left", lineHeight: 1.7 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24", marginBottom: 8 }}>⏳ Status: Menunggu Konfirmasi Admin</p>
+              <p style={{ fontSize: 13, color: "#fbbf24", opacity: 0.85 }}>
+                Admin akan memverifikasi booking dan dokumen Anda dalam maks. <strong>1×24 jam</strong>.
+              </p>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid rgba(245,158,11,0.2)" }}>
+                <p style={{ fontSize: 12, color: TEXT_MUTED, marginBottom: 4 }}>Setelah dikonfirmasi, Anda akan bisa:</p>
+                <p style={{ fontSize: 12, color: "#94a3b8" }}>✓ Melanjutkan pembayaran</p>
+                <p style={{ fontSize: 12, color: "#94a3b8" }}>✓ Melihat detail kendaraan yang disewa</p>
+              </div>
+            </div>
+          )}
+
+          {/* Detail booking singkat */}
+          {lastRental && (
+            <div style={{ background: "#0f1724", border: `0.5px solid ${CARD_BORDER}`, borderRadius: 12, padding: "16px 18px", marginBottom: 20, textAlign: "left" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 10 }}>Detail Booking</div>
+              <Row label="Kendaraan" value={lastRental.vehicle_name} />
+              <Row label="Plat" value={lastRental.plate} />
+              <Row label="Tanggal" value={`${lastRental.start_date} s/d ${lastRental.end_date}`} />
+              <Row label="Total" value={fmt(lastRental.total_cost)} />
+              <Row label="Status" value={lastRental.status} />
+              <Row label="Pembayaran" value={lastRental.payment_status} />
+            </div>
+          )}
+
+          {!isAktif && !isDitolak && (
+            <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, padding: "14px 18px", marginBottom: 28, textAlign: "left" }}>
+              <p style={{ fontSize: 12, color: "#f87171", lineHeight: 1.6 }}>
+                ❌ <strong>Jika booking ditolak</strong>, status akan berubah menjadi <strong>Dibatalkan</strong> dan Anda dapat melakukan booking ulang dengan kendaraan lain.
+              </p>
+            </div>
+          )}
+
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <button onClick={resetBooking} style={btnSecondary}>Booking Lagi</button>
+            {isAktif && !isLunas ? (
+              <button onClick={() => onNavigate("pembayaran")} style={btnPrimary}>Lanjutkan Pembayaran</button>
+            ) : (
+              <button onClick={() => setBookStep(5)} style={btnPrimary}>Selesai</button>
+            )}
           </div>
         </div>
+      </div>
 
-        {/* Info jika ditolak */}
-        <div style={{ background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 12, padding: "14px 18px", marginBottom: 28, textAlign: "left" }}>
-          <p style={{ fontSize: 12, color: "#f87171", lineHeight: 1.6 }}>
-            ❌ <strong>Jika booking ditolak</strong>, status akan berubah menjadi <strong>Dibatalkan</strong> dan Anda dapat melakukan booking ulang dengan kendaraan lain.
+    );
+  }
+
+  // ── STEP 5: Selesai ─────────────────────────────────────────
+  if (bookStep === 5 && bookSuccess) {
+    return (
+      <div>
+        <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
+        <StepIndicator current={5} onStepClick={handleStepClick} locked={isLockedFromEditing} />
+        <div style={{ background: CARD_BG, borderRadius: 16, border: `0.5px solid ${CARD_BORDER}`, padding: "48px 32px", textAlign: "center" }}>
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(34,197,94,0.12)", border: "2px solid rgba(34,197,94,0.4)", color: "#4ade80", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px", fontSize: 36 }}>
+            ✓
+          </div>
+          <h2 style={{ fontSize: 22, fontWeight: 800, color: TEXT_PRIMARY, marginBottom: 8 }}>
+            Terima Kasih!
+          </h2>
+          <p style={{ fontSize: 13, color: TEXT_MUTED, marginBottom: 28, maxWidth: 420, marginLeft: "auto", marginRight: "auto", lineHeight: 1.6 }}>
+            Booking Anda sudah tercatat dan sedang menunggu konfirmasi admin. Anda bisa memantau statusnya kapan saja lewat halaman Riwayat Sewa.
           </p>
-        </div>
 
-        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
-          <button onClick={resetBooking}            style={btnSecondary}>Booking Lagi</button>
-          <button onClick={() => onNavigate("riwayat")} style={btnPrimary}>Cek Status Booking</button>
+          <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+            <button onClick={resetBooking} style={btnSecondary}>Booking Lagi</button>
+            <button onClick={() => onNavigate("riwayat")} style={btnPrimary}>Cek Status Booking</button>
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   // ── Main layout ───────────────────────────────────────────
   return (
     <div>
       <PageHeader title="Booking Kendaraan" subtitle="Isi formulir booking dengan lengkap" />
-      <StepIndicator current={bookStep} onStepClick={handleStepClick} />
+      <StepIndicator current={bookStep} onStepClick={handleStepClick} locked={isLockedFromEditing} />
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 18 }}>
 
-        {/* ── STEP 1: Data Diri & Dokumen ──────────────────── */}
         {bookStep === 1 && (
           <div style={{ background: CARD_BG, borderRadius: 14, border: `0.5px solid ${CARD_BORDER}`, overflow: "hidden" }}>
             <SectionHeader title="Data Diri & Dokumen Identitas" />
             <div style={{ padding: 22 }}>
 
-              {/* Info banner */}
               <div style={{ background: "rgba(59,130,246,0.08)", border: "0.5px solid rgba(59,130,246,0.25)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 12, color: "#93c5fd", display: "flex", gap: 8 }}>
                 <span style={{ flexShrink: 0, marginTop: 1 }}>ℹ️</span>
                 <span>Data diri dan dokumen diperlukan untuk verifikasi identitas penyewa. Informasi Anda disimpan secara aman dan hanya digunakan untuk keperluan sewa.</span>
               </div>
 
-              {/* Name & NIK */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
                 <div>
                   <label style={lStyle}>Nama Lengkap (sesuai KTP) <Req /></label>
@@ -334,7 +528,6 @@ setBookLoading(false);
                 </div>
               </div>
 
-              {/* Phone & SIM number */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
                 <div>
                   <label style={lStyle}>No. HP Aktif <Req /></label>
@@ -348,7 +541,6 @@ setBookLoading(false);
                 </div>
               </div>
 
-              {/* Address */}
               <div style={{ marginBottom: 20 }}>
                 <label style={lStyle}>Alamat Sesuai KTP <Req /></label>
                 <textarea rows={2} placeholder="Jl. Contoh No. 1, Kota, Provinsi"
@@ -357,45 +549,43 @@ setBookLoading(false);
                   style={{ ...iStyle, resize: "vertical" }} />
               </div>
 
-              {/* Divider */}
               <div style={{ borderTop: `0.5px solid ${CARD_BORDER}`, marginBottom: 20 }} />
 
-              {/* Document uploads */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-  <DocUpload
-    label="Foto KTP"
-    required
-    hint="JPG/PNG, maks 5MB. Pastikan semua tulisan terbaca jelas."
-    preview={identityForm.ktpPreview}
-    icon="🪪"
-    inputRef={ktpRef as React.RefObject<HTMLInputElement>}
-    onPick={(f) => handleFilePick("ktp", f)}
-    onClear={() =>
-      setIdentityForm((p) => ({
-        ...p,
-        ktpFile: null,
-        ktpPreview: "",
-      }))
-    }
-  />
+                <DocUpload
+                  label="Foto KTP"
+                  required
+                  hint="JPG/PNG, maks 5MB. Pastikan semua tulisan terbaca jelas."
+                  preview={identityForm.ktpPreview}
+                  icon="🪪"
+                  inputRef={ktpRef as React.RefObject<HTMLInputElement>}
+                  onPick={(f) => handleFilePick("ktp", f)}
+                  onClear={() =>
+                    setIdentityForm((p) => ({
+                      ...p,
+                      ktpFile: null,
+                      ktpPreview: "",
+                    }))
+                  }
+                />
 
-  <DocUpload
-    label="Foto SIM"
-    required
-    hint="SIM A atau C yang masih berlaku."
-    preview={identityForm.simPreview}
-    icon="🚗"
-    inputRef={simRef as React.RefObject<HTMLInputElement>}
-    onPick={(f) => handleFilePick("sim", f)}
-    onClear={() =>
-      setIdentityForm((p) => ({
-        ...p,
-        simFile: null,
-        simPreview: "",
-      }))
-    }
-  />
-</div>
+                <DocUpload
+                  label="Foto SIM"
+                  required
+                  hint="SIM A atau C yang masih berlaku."
+                  preview={identityForm.simPreview}
+                  icon="🚗"
+                  inputRef={simRef as React.RefObject<HTMLInputElement>}
+                  onPick={(f) => handleFilePick("sim", f)}
+                  onClear={() =>
+                    setIdentityForm((p) => ({
+                      ...p,
+                      simFile: null,
+                      simPreview: "",
+                    }))
+                  }
+                />
+              </div>
               {bookError && <ErrorBox msg={bookError} />}
 
               <button
@@ -413,7 +603,6 @@ setBookLoading(false);
           </div>
         )}
 
-        {/* ── STEP 2: Pilih Kendaraan ──────────────────────── */}
         {bookStep === 2 && (
           <div style={{ background: CARD_BG, borderRadius: 14, border: `0.5px solid ${CARD_BORDER}`, overflow: "hidden" }}>
             <div style={{ padding: "14px 18px", borderBottom: `0.5px solid ${CARD_BORDER}`, display: "flex", alignItems: "center", gap: 12 }}>
@@ -457,7 +646,6 @@ setBookLoading(false);
           </div>
         )}
 
-        {/* ── STEP 3: Detail Booking ────────────────────────── */}
         {bookStep === 3 && (
           <div style={{ background: CARD_BG, borderRadius: 14, border: `0.5px solid ${CARD_BORDER}`, padding: 22 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
@@ -508,14 +696,12 @@ setBookLoading(false);
           </div>
         )}
 
-        {/* Booking summary sidebar */}
         <BookingSummary vehicle={selectedVehicle} bookForm={bookForm} identity={identityForm} step={bookStep} />
       </div>
     </div>
   );
 }
 
-// ─── DocUpload component ──────────────────────────────────────
 function DocUpload({ label, required, hint, preview, icon, inputRef, onPick, onClear }: {
   label: string; required?: boolean; hint: string; preview: string; icon: string;
   inputRef: React.RefObject<HTMLInputElement>;
@@ -552,7 +738,6 @@ function DocUpload({ label, required, hint, preview, icon, inputRef, onPick, onC
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────
 function PageHeader({ title, subtitle }: { title: string; subtitle: string }) {
   return (
     <div style={{ marginBottom: 20 }}>
@@ -570,37 +755,39 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-// ─── StepIndicator (clickable) ─────────────────────────────────
-function StepIndicator({ current, onStepClick }: { current: number; onStepClick?: (n: 1 | 2 | 3 | 4) => void }) {
+function StepIndicator({ current, onStepClick, locked }: { current: number; onStepClick?: (n: 1 | 2 | 3 | 4 | 5) => void; locked?: boolean }) {
   const steps = [
     { n: 1, l: "Data Diri" },
     { n: 2, l: "Pilih Kendaraan" },
     { n: 3, l: "Detail Booking" },
-    { n: 4, l: "Selesai" },
+    { n: 4, l: "Cek Booking" },
+    { n: 5, l: "Selesai" },
   ];
   return (
     <div style={{ display: "flex", gap: 0, marginBottom: 24, background: CARD_BG, borderRadius: 12, border: `0.5px solid ${CARD_BORDER}`, overflow: "hidden" }}>
       {steps.map((s, i) => {
-        // Step 4 ("Selesai") tidak boleh diklik manual — hanya dicapai lewat submit booking sukses.
-        // Step yang sedang aktif juga tidak perlu diklik.
-        const clickable = s.n !== 4 && s.n !== current;
+        // Step 1-3 dikunci begitu booking sudah terkirim (locked=true).
+        const isPastStepLocked = locked && s.n < 4;
+        const clickable = s.n !== current && !isPastStepLocked;
         return (
           <div
             key={s.n}
-            onClick={() => clickable && onStepClick?.(s.n as 1 | 2 | 3 | 4)}
+            onClick={() => onStepClick?.(s.n as 1 | 2 | 3 | 4 | 5)}
             style={{
               flex: 1,
               padding: "12px 10px",
               textAlign: "center",
               background: current === s.n ? ACCENT : current > s.n ? "rgba(245,158,11,0.1)" : CARD_BG,
-              borderRight: i < 3 ? `0.5px solid ${CARD_BORDER}` : "none",
-              cursor: clickable ? "pointer" : "default",
+              borderRight: i < steps.length - 1 ? `0.5px solid ${CARD_BORDER}` : "none",
+              cursor: isPastStepLocked ? "not-allowed" : clickable ? "pointer" : "default",
+              opacity: isPastStepLocked ? 0.55 : 1,
               transition: "background 0.15s",
               userSelect: "none",
             }}
+            title={isPastStepLocked ? "Booking sudah terkirim, langkah ini terkunci" : undefined}
           >
             <div style={{ fontSize: 12, fontWeight: 700, color: current === s.n ? "#fff" : current > s.n ? ACCENT : TEXT_MUTED }}>
-              {current > s.n ? "✓ " : `${s.n}. `}{s.l}
+              {isPastStepLocked ? "🔒 " : current > s.n ? "✓ " : `${s.n}. `}{s.l}
             </div>
           </div>
         );
@@ -634,7 +821,6 @@ function BookingSummary({ vehicle, bookForm, identity, step }: {
       </div>
       <div style={{ padding: 18 }}>
 
-        {/* Identity summary (shown from step 2+) */}
         {step >= 2 && identity.fullName && (
           <div style={{ background: "#0f1724", borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Data Penyewa</div>
@@ -648,7 +834,6 @@ function BookingSummary({ vehicle, bookForm, identity, step }: {
           </div>
         )}
 
-        {/* Vehicle */}
         {vehicle ? (
           <>
             <VehicleImg vehicle={vehicle} style={{ width: "100%", height: 120, objectFit: "cover", borderRadius: 10, marginBottom: 12 }} />
@@ -661,7 +846,6 @@ function BookingSummary({ vehicle, bookForm, identity, step }: {
           </div>
         )}
 
-        {/* Price breakdown */}
         {bookForm.start && bookForm.end && bookForm.end > bookForm.start && vehicle && (() => {
           const days = diffDays(bookForm.start, bookForm.end);
           const driverFee = bookForm.withDriver ? days * 150000 : 0;
@@ -714,7 +898,6 @@ function Req() {
   return <span style={{ color: "#f87171", marginLeft: 2 }}>*</span>;
 }
 
-// ─── Button styles ────────────────────────────────────────────
 const btnPrimary: React.CSSProperties = {
   padding: "10px 24px", borderRadius: 9, border: "none", background: ACCENT,
   color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer", fontFamily: "inherit",

@@ -1,7 +1,7 @@
 "use client";
 // app/portal/page.tsx — Walid Rent Car Aceh · Portal Pelanggan
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase/client";
 import type { ReactNode } from "react";
@@ -99,7 +99,6 @@ export default function PortalPage() {
       ]);
       setVehicles(v ?? []);
       setRentals(r ?? []);
-      console.log("📦 INIT rentals:", r);
       setNotifs(
         (notifData ?? []).map((n: any) => ({
           ...n,
@@ -120,42 +119,83 @@ export default function PortalPage() {
     init();
   }, [router]);
 
+  // ── Refetch semua rental milik user ini dari DB ─────────────────
+  // Dipakai baik oleh realtime listener (payload.new kadang tidak selalu
+  // membawa semua kolom terbaru tergantung setting REPLICA IDENTITY) maupun
+  // oleh fallback polling di bawah.
+  const refetchRentals = async (userId: string) => {
+    const { data } = await supabase
+      .from("rentals")
+      .select("*")
+      .eq("customer_id", userId)
+      .order("created_at", { ascending: false });
+    if (data) setRentals(data);
+  };
+
   // ── Realtime ──────────────────────────────────────────────────
- // ── Realtime ──────────────────────────────────────────────────
-useEffect(() => {
-  if (!user) return;
+  // Ref untuk mencegah dua channel realtime dibuat bersamaan pada user yang
+  // sama (misal karena React StrictMode / Fast Refresh menjalankan efek dua
+  // kali secara berdekatan saat development). Channel ganda dengan nama sama
+  // bisa saling konflik → CHANNEL_ERROR berulang → event UPDATE dari admin
+  // berisiko "lewat" tanpa pernah sampai ke browser customer.
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  const channel = supabase
-    .channel("portal-realtime")
-    // Update status rental di UI (riwayat, pembayaran, dsb)
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table: "rentals", filter: `customer_id=eq.${user.id}` },
-      (payload) => {
-        console.log("🔔 RENTAL UPDATE:", payload);
-        setRentals((prev) =>
-          prev.map((r) => (r.id === payload.new.id ? { ...r, ...(payload.new as Rental) } : r)),
-        );
-      },
-    )
-    // Notifikasi baru dari DB trigger (bukan dari client lagi)
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
-      (payload) => {
-        console.log("🔔 NOTIF BARU:", payload);
-        setNotifs((prev) => [
-          { ...(payload.new as Notification), time: "Baru saja" },
-          ...prev,
-        ]);
-      },
-    )
-    .subscribe((status) => {
-      console.log("📡 STATUS CHANNEL portal-realtime:", status);
-    });
+  useEffect(() => {
+    if (!user) return;
 
-  return () => { supabase.removeChannel(channel); };
-}, [user]);
+    // Kalau sebelumnya masih ada channel aktif untuk user ini, bersihkan dulu
+    // sebelum membuat yang baru.
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
+      channelRef.current = null;
+    }
+
+    // Nama channel dibuat unik per user (bukan string statis "portal-realtime")
+    // supaya tidak gampang bentrok antar tab/instance.
+    const channel = supabase
+      .channel(`portal-realtime-${user.id}`)
+      // Update status rental di UI (riwayat, pembayaran, dsb)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "rentals", filter: `customer_id=eq.${user.id}` },
+        (payload) => {
+          console.log("🔔 RENTAL UPDATE:", payload);
+          setRentals((prev) =>
+            prev.map((r) => (r.id === payload.new.id ? { ...r, ...(payload.new as Rental) } : r)),
+          );
+        },
+      )
+      // Notifikasi baru dari DB trigger (bukan dari client lagi)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          console.log("🔔 NOTIF BARU:", payload);
+          setNotifs((prev) => [
+            { ...(payload.new as Notification), time: "Baru saja" },
+            ...prev,
+          ]);
+        },
+      )
+      .subscribe((status) => {
+        console.log("📡 STATUS CHANNEL portal-realtime:", status);
+      });
+
+    channelRef.current = channel;
+
+    // Fallback polling: kalau realtime channel sempat putus/gagal tanpa
+    // sepengetahuan kita, data tetap ter-refresh maksimal tiap 20 detik —
+    // jadi customer tidak perlu reload manual walau realtime lagi bermasalah.
+    const pollInterval = window.setInterval(() => {
+      refetchRentals(user.id);
+    }, 20000);
+
+    return () => {
+      supabase.removeChannel(channel);
+      channelRef.current = null;
+      window.clearInterval(pollInterval);
+    };
+  }, [user]);
 
   // ── Helpers ───────────────────────────────────────────────────
   const pushNotif = async (type: Notification["type"], title: string, message: string) => {
